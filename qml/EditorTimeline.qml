@@ -362,7 +362,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             TrimButton {
                 text: "Export..."
-                enabled: !videoExportController.busy
+                enabled: exportQueue.canQueue
                 onClicked: root.exportRequested()
             }
         }

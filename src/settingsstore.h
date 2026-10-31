@@ -19,6 +19,7 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString seekBarThickness READ seekBarThickness WRITE setSeekBarThickness NOTIFY seekBarThicknessChanged)
     Q_PROPERTY(bool keepBackupOnReplace READ keepBackupOnReplace WRITE setKeepBackupOnReplace NOTIFY keepBackupOnReplaceChanged)
     Q_PROPERTY(QString encodingPreset READ encodingPreset WRITE setEncodingPreset NOTIFY encodingPresetChanged)
+    Q_PROPERTY(QString gifQualityPreset READ gifQualityPreset WRITE setGifQualityPreset NOTIFY gifQualityPresetChanged)
 
 public:
     explicit SettingsStore(QObject *parent = nullptr);
@@ -38,6 +39,8 @@ public:
     void setKeepBackupOnReplace(bool enabled);
     QString encodingPreset() const { return m_encodingPreset; }
     void setEncodingPreset(const QString &preset);
+    QString gifQualityPreset() const { return m_gifQualityPreset; }
+    void setGifQualityPreset(const QString &preset);
 
     Q_INVOKABLE void bumpRecent(const QString &path);
     Q_INVOKABLE void clearRecent();
@@ -60,6 +63,7 @@ signals:
     void seekBarThicknessChanged();
     void keepBackupOnReplaceChanged();
     void encodingPresetChanged();
+    void gifQualityPresetChanged();
     void resumeEnabledChanged();
 
 private:
@@ -73,6 +77,7 @@ private:
     QString m_seekBarThickness = QStringLiteral("slim");
     bool m_keepBackupOnReplace = false;
     QString m_encodingPreset = QStringLiteral("veryfast");
+    QString m_gifQualityPreset = QStringLiteral("balanced");
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}
 };

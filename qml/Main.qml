@@ -23,6 +23,19 @@ ApplicationWindow {
     property bool adjustmentsOpen: false
     property bool fullscreenMode: false
 
+    property bool allowCloseWithExports: false
+    onClosing: function(close) {
+        if (!allowCloseWithExports &&
+            (exportQueue.hasOutstanding || videoExportController.busy)) {
+            close.accepted = false;
+            closingExportsDialog.open();
+        }
+    }
+
+    function requestClose() {
+        prismWindow.close();
+    }
+
     property bool editMode: false
     property string editSourcePath: ""
     property real editStart: 0
@@ -71,8 +84,8 @@ ApplicationWindow {
             toast.show("Open a video and wait for it to load before editing.", true);
             return;
         }
-        if (videoExportController.busy) {
-            toast.show("Finish or cancel the current export first.", true);
+        if (videoExportController.busy && !exportQueue.hasOutstanding) {
+            toast.show("Finish replacing the original video before editing.", true);
             return;
         }
         if (fullscreenMode)
@@ -96,8 +109,8 @@ ApplicationWindow {
     }
 
     function leaveEditing() {
-        if (videoExportController.busy) {
-            toast.show("Finish or cancel the current export first.", false);
+        if (videoExportController.busy && !exportQueue.hasOutstanding) {
+            toast.show("Finish replacing the original before leaving Edit mode.", false);
             return;
         }
         previewSelectionPlaying = false;
@@ -114,16 +127,16 @@ ApplicationWindow {
     }
 
     function openGifSaveDialog() {
-        if (!editMode || videoExportController.busy)
+        if (!editMode || !exportQueue.canQueue)
             return;
-        gifSaveDialog.selectedFile = videoExportController.suggestedGifOutputUrl(editSourcePath);
+        gifSaveDialog.selectedFile = exportQueue.suggestedOutputUrl(editSourcePath, true);
         gifSaveDialog.open();
     }
 
     function openTrimSaveDialog() {
-        if (!editMode || videoExportController.busy)
+        if (!editMode || !exportQueue.canQueue)
             return;
-        trimSaveDialog.selectedFile = videoExportController.suggestedOutputUrl(editSourcePath);
+        trimSaveDialog.selectedFile = exportQueue.suggestedOutputUrl(editSourcePath, false);
         trimSaveDialog.open();
     }
 
@@ -193,6 +206,8 @@ ApplicationWindow {
             libraryOpen: prismWindow.libraryOpen
             adjustmentsOpen: prismWindow.adjustmentsOpen
             editorActive: prismWindow.editMode
+            outstandingExports: exportQueue.waitingCount + (exportQueue.hasOutstanding && videoExportController.busy ? 1 : 0)
+            onQueueRequested: exportQueuePopup.open()
             onEditRequested: prismWindow.editMode ? prismWindow.leaveEditing() : prismWindow.beginEditing()
             onLibraryToggled: prismWindow.libraryOpen = !prismWindow.libraryOpen
             onAdjustmentsToggled: prismWindow.adjustmentsOpen = !prismWindow.adjustmentsOpen
@@ -258,7 +273,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 200
                     visible: prismWindow.editMode
-                    enabled: !videoExportController.busy
+                    enabled: exportQueue.canQueue
                     duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
                     position: videoSurface.mpv ? videoSurface.mpv.position : 0
                     startTime: prismWindow.editStart
@@ -318,6 +333,7 @@ ApplicationWindow {
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.openTrimSaveDialog()
                 onExportGifRequested: prismWindow.openGifSaveDialog()
+                onQueueRequested: exportQueuePopup.open()
                 onReplaceRequested: replaceConfirmDialog.open()
                 onPreviewRequested: prismWindow.previewEditRange()
                 onResetRequested: {
@@ -527,6 +543,10 @@ ApplicationWindow {
         standardButtons: Dialog.Ok | Dialog.Cancel
         closePolicy: Popup.CloseOnEscape
         onAccepted: {
+            if (exportQueue.hasOutstanding || videoExportController.busy) {
+                toast.show("Finish all queued exports before replacing the original.", true);
+                return;
+            }
             prismWindow.stopRangePreview();
             videoExportController.startReplaceTrim(prismWindow.editSourcePath,
                                                    prismWindow.editStart,
@@ -564,12 +584,12 @@ ApplicationWindow {
         defaultSuffix: "mp4"
         nameFilters: ["MP4 video (*.mp4)"]
         onAccepted: {
-            prismWindow.stopRangePreview();
-            videoExportController.startTrim(prismWindow.editSourcePath,
-                                             prismWindow.editStart,
-                                             prismWindow.editEnd,
-                                             selectedFile, prismWindow.editSpeed,
-                                             prismWindow.editMuted);
+            if (!exportQueue.queueMp4(prismWindow.editSourcePath,
+                                      prismWindow.editStart, prismWindow.editEnd,
+                                      selectedFile, prismWindow.editSpeed, prismWindow.editMuted))
+                toast.show(exportQueue.lastError, true);
+            else
+                toast.show("MP4 added to export queue.", false);
         }
     }
 
@@ -580,11 +600,56 @@ ApplicationWindow {
         defaultSuffix: "gif"
         nameFilters: ["Animated GIF (*.gif)"]
         onAccepted: {
-            prismWindow.stopRangePreview();
-            videoExportController.startGif(prismWindow.editSourcePath,
-                                            prismWindow.editStart,
-                                            prismWindow.editEnd,
-                                            selectedFile, prismWindow.editSpeed);
+            if (!exportQueue.queueGif(prismWindow.editSourcePath,
+                                      prismWindow.editStart, prismWindow.editEnd,
+                                      selectedFile, prismWindow.editSpeed))
+                toast.show(exportQueue.lastError, true);
+            else
+                toast.show("GIF added to export queue.", false);
+        }
+    }
+
+    Popup {
+        id: exportQueuePopup
+        parent: Overlay.overlay
+        modal: false
+        focus: true
+        x: Math.max(8, prismWindow.width - width - 16)
+        y: 48
+        width: Math.min(380, prismWindow.width - 16)
+        height: Math.min(440, prismWindow.height - 60)
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 10
+            color: prismWindow.tokens.panelGlassStrong || "#242331"
+            border.width: 1
+            border.color: prismWindow.tokens.panelBorder || "#444"
+        }
+        contentItem: ExportQueuePanel { }
+    }
+
+    Dialog {
+        id: closingExportsDialog
+        modal: true
+        width: Math.min(440, prismWindow.width - 40)
+        anchors.centerIn: parent
+        title: "Exports are still running"
+        standardButtons: Dialog.Yes | Dialog.No
+        contentItem: Text {
+            width: 390
+            wrapMode: Text.WordWrap
+            text: "Closing Prism will stop the active export and discard the waiting queue. Exit anyway?"
+            font.pixelSize: 12
+            color: prismWindow.tokens.textPrimary || "#fff"
+        }
+        background: Rectangle {
+            color: prismWindow.tokens.panelGlassStrong || "#242331"
+            border.color: prismWindow.tokens.panelBorder || "#444"
+            radius: 10
+        }
+        onAccepted: {
+            prismWindow.allowCloseWithExports = true;
+            prismWindow.close();
         }
     }
 

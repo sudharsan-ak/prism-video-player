@@ -28,6 +28,8 @@ qt_add_executable(Prism
     src/themecontroller.h
     src/videoexportcontroller.cpp
     src/videoexportcontroller.h
+    src/exportqueuecontroller.cpp
+    src/exportqueuecontroller.h
     src/videothumbnailcontroller.cpp
     src/videothumbnailcontroller.h
     resources/prism.rc
@@ -37,6 +39,7 @@ qt_add_qml_module(Prism
     URI Prism
     VERSION 1.0
     QML_FILES
+        qml/ExportQueuePanel.qml
         qml/Main.qml
         qml/TopBar.qml
         qml/TopMenuLabel.qml

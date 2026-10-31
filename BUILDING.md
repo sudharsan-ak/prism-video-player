@@ -163,3 +163,51 @@ cancel and failed replacement, thumbnail reuse and all six themes.
 - Verify pause-button alignment in different themes, and compare GIF
   startup time, color, speed-adjusted duration, and file size against
   previous builds with short and long clips.
+
+## Sequential background export queue
+
+- MP4 **Export edited copy** and **Export animated GIF** add a job to a
+  session-only queue. One FFmpeg process runs at a time; subsequent jobs
+  start automatically in creation order. The Edit timeline remains
+  interactive during those exports. Changes made after queuing a job do
+  not affect it: trim range, speed, audio mute, MP4 encoding preset and
+  GIF quality preset are captured when the job is submitted.
+- The editing sidebar displays the queue. **Exports** in the top bar
+  opens a queue popup even outside Edit mode. Cancel individual waiting
+  or running jobs, and clear completed/canceled/failed entries.
+- Each queued output name is reserved; a second job cannot overwrite
+  an existing or reserved file. If the source changes or disappears
+  before a job begins, that job fails safely and the queue continues.
+- **Replace original MP4** remains exclusive. It is disabled until all
+  copy/GIF exports complete or are canceled and never enters the
+  background queue.
+- Closing Prism with active/waiting jobs displays a warning. The queue
+  is *in-memory only*, not resumed after an app restart. FFmpeg processes
+  will stop when Prism exits.
+
+## GIF quality presets
+
+- High Quality: up to 640px wide, 12 fps, 256-color palette.
+- Balanced (default): up to 480px wide, 10 fps, 128 colors.
+- Compact: up to 360px wide, 8 fps, 96 colors.
+
+GIF presets are independent of MP4 encoding presets. The choice persists
+in settings.json. All GIFs are silent, loop indefinitely, and use the
+selected trim range and playback speed. Quality/size tradeoffs depend on
+content; fine detail and motion may be reduced on Balanced/Compact.
+
+### Acceptance tests
+
+1. Queue an MP4 and then two GIFs while the first runs. Continue
+   scrubbing/changing ranges and confirm every output matches the
+   settings captured when that job was queued; only one runs at a time.
+2. Cancel a waiting job and the active job, then verify the next runs.
+   Try duplicate output names and missing/deleted source files.
+3. Reopen Edit or switch to normal playback while exports continue,
+   and use the top-bar Exports popup to monitor jobs.
+4. Verify Replace original is blocked whenever copy/GIF jobs remain.
+   Test replacement on disposable clips after the queue clears.
+5. Compare High/Balanced/Compact output file sizes, colors and
+   animation smoothness on the same clip; restart to confirm
+   preset persistence.
+6. Try closing Prism during an active export and verify the warning.

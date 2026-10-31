@@ -25,6 +25,11 @@ Rectangle {
         const names = ["Ultrafast", "Very Fast", "Fast", "Medium", "Slow"];
         return names[Math.max(0, presetIds.indexOf(id))];
     }
+    function gifLabel(id) {
+        return id === "high" ? "High Quality (640px · 12fps)" :
+               id === "compact" ? "Compact (360px · 8fps)" :
+                                  "Balanced (480px · 10fps)";
+    }
 
     signal closeRequested()
     signal exportRequested()
@@ -32,6 +37,7 @@ Rectangle {
     signal replaceRequested()
     signal previewRequested()
     signal resetRequested()
+    signal queueRequested()
 
     function timeText(seconds) {
         let s = Math.max(0, Math.floor(seconds || 0));
@@ -67,7 +73,7 @@ Rectangle {
                 }
                 Button {
                     text: "✕"
-                    enabled: !videoExportController.busy
+                    enabled: exportQueue.canQueue
                     flat: true
                     onClicked: root.closeRequested()
                     ToolTip.visible: hovered
@@ -179,7 +185,8 @@ Rectangle {
                     + "Edited duration: " + root.timeText((root.endTime - root.startTime)
                         / Math.max(0.25, root.editSpeed)) + "\n"
                     + "MP4 audio: " + (root.muteAudio ? "Removed" : "First audio track") + "\n"
-                    + "GIF: Silent, 12 fps, up to 640px wide\nSubtitles not included"
+                    + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
+                    + "\nSubtitles not included"
                 lineHeight: 1.45
                 wrapMode: Text.WordWrap
             }
@@ -198,7 +205,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                enabled: !videoExportController.busy
+                enabled: exportQueue.canQueue
                 text: root.presetLabel(settingsStore.encodingPreset) + " ▾"
                 onClicked: presetMenu.open()
                 background: Rectangle {
@@ -238,11 +245,65 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: "GIF QUALITY"
+                font.pixelSize: 10
+                font.bold: true
+                color: root.tokens.textMuted || "#999"
+            }
+            Button {
+                id: gifPresetButton
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                enabled: exportQueue.canQueue
+                text: root.gifLabel(settingsStore.gifQualityPreset) + " ▾"
+                onClicked: gifPresetMenu.open()
+                background: Rectangle {
+                    radius: 8
+                    color: root.tokens.panelGlassStrong || "#242331"
+                    border.color: root.tokens.panelBorder || "#444"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textPrimary || "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Menu {
+                    id: gifPresetMenu
+                    parent: gifPresetButton
+                    y: gifPresetButton.height
+                    Repeater {
+                        model: ["high", "balanced", "compact"]
+                        MenuItem {
+                            text: root.gifLabel(modelData)
+                            checkable: true
+                            checked: settingsStore.gifQualityPreset === modelData
+                            onTriggered: settingsStore.gifQualityPreset = modelData
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: "Balanced is recommended. GIFs have no sound and can be much larger than MP4."
+                color: root.tokens.textMuted || "#888"
+                font.pixelSize: 10
+                wrapMode: Text.WordWrap
+            }
+
             Button {
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                enabled: !videoExportController.busy && root.endTime - root.startTime >= 0.1
+                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
                 text: "Export edited copy..."
                 onClicked: root.exportRequested()
                 font.pixelSize: 12
@@ -265,7 +326,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                enabled: !videoExportController.busy && root.endTime - root.startTime >= 0.1
+                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
                 text: "Export animated GIF..."
                 onClicked: root.exportGifRequested()
                 font.pixelSize: 12
@@ -289,7 +350,7 @@ Rectangle {
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
                 enabled: root.canReplace && !videoExportController.busy &&
-                         root.endTime - root.startTime >= 0.1
+                         !exportQueue.hasOutstanding && root.endTime - root.startTime >= 0.1
                 text: "Replace original MP4..."
                 onClicked: root.replaceRequested()
                 font.pixelSize: 12
@@ -313,72 +374,44 @@ Rectangle {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
                 text: root.canReplace
-                    ? (settingsStore.keepBackupOnReplace
-                        ? "Backup enabled. A timestamped original will be kept."
-                        : "Backup OFF. Change this in Tools → Settings.")
+                    ? (exportQueue.hasOutstanding
+                        ? "Replace original is available after the export queue finishes."
+                        : settingsStore.keepBackupOnReplace
+                            ? "Backup enabled. A timestamped original will be kept."
+                            : "Backup OFF. Change this in Tools → Settings.")
                     : "Replacing the original is supported only for MP4 sources."
                 color: root.tokens.textMuted || "#888"
                 font.pixelSize: 10
                 wrapMode: Text.WordWrap
             }
 
-            ColumnLayout {
-                visible: videoExportController.busy
-                    || videoExportController.error.length > 0
-                    || videoExportController.lastOutput.toString().length > 0
+            ExportQueuePanel {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                spacing: 9
-
-                Text {
-                    Layout.fillWidth: true
-                    text: videoExportController.error.length
-                        ? videoExportController.error : videoExportController.status
-                    color: videoExportController.error.length ? "#E36B6B" : (root.tokens.textPrimary || "white")
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 11
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                Layout.preferredHeight: Math.min(310, Math.max(130,
+                    65 + Math.min(exportQueue.jobs.length, 3) * 80))
+                visible: exportQueue.jobs.length > 0
+                compact: true
+            }
+            Button {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                text: "View export queue"
+                onClicked: root.queueRequested()
+                font.pixelSize: 11
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.accentSolid || "#A89BFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
-                ProgressBar {
-                    id: exportProgress
-                    visible: videoExportController.busy
-                    Layout.fillWidth: true
-                    value: videoExportController.progress
-                    from: 0
-                    to: 1
-                    background: Rectangle {
-                        implicitHeight: 6
-                        radius: 3
-                        color: root.tokens.seekTrack || "#4A4A60"
-                    }
-                    contentItem: Item {
-                        implicitHeight: 6
-                        Rectangle {
-                            width: parent.width * exportProgress.position
-                            height: 6
-                            radius: 3
-                            color: root.tokens.accentSolid || "#A89BFF"
-                        }
-                    }
-                }
-                Text {
-                    visible: videoExportController.busy
-                    text: Math.round(videoExportController.progress * 100) + "%"
-                    color: root.tokens.textSecondary || "#aaa"
-                    font.pixelSize: 11
-                }
-                Button {
-                    visible: videoExportController.busy
-                    text: "Cancel export"
-                    onClicked: videoExportController.cancel()
-                }
-                Text {
-                    visible: videoExportController.lastOutput.toString().length > 0
-                    Layout.fillWidth: true
-                    text: videoExportController.lastOutput.toString()
-                    wrapMode: Text.WrapAnywhere
-                    color: root.tokens.textSecondary || "#aaa"
-                    font.pixelSize: 10
+                background: Rectangle {
+                    radius: 7
+                    color: root.tokens.panelGlassStrong || "#242331"
+                    border.color: root.tokens.panelBorder || "#444"
                 }
             }
 

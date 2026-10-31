@@ -65,6 +65,10 @@ void SettingsStore::load()
         preset == QStringLiteral("fast") || preset == QStringLiteral("medium") ||
         preset == QStringLiteral("slow"))
         m_encodingPreset = preset;
+    const QString gifPreset = root.value("gifQualityPreset").toString(QStringLiteral("balanced"));
+    if (gifPreset == QStringLiteral("high") || gifPreset == QStringLiteral("balanced") ||
+        gifPreset == QStringLiteral("compact"))
+        m_gifQualityPreset = gifPreset;
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
     if (root.contains("bookmarks") && root["bookmarks"].isObject())
@@ -86,6 +90,7 @@ void SettingsStore::save()
     root["seekBarThickness"] = m_seekBarThickness;
     root["keepBackupOnReplace"] = m_keepBackupOnReplace;
     root["encodingPreset"] = m_encodingPreset;
+    root["gifQualityPreset"] = m_gifQualityPreset;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
 
@@ -158,6 +163,18 @@ void SettingsStore::setEncodingPreset(const QString &preset)
         return;
     m_encodingPreset = preset;
     emit encodingPresetChanged();
+    save();
+}
+
+void SettingsStore::setGifQualityPreset(const QString &preset)
+{
+    if (preset != QStringLiteral("high") && preset != QStringLiteral("balanced") &&
+        preset != QStringLiteral("compact"))
+        return;
+    if (preset == m_gifQualityPreset)
+        return;
+    m_gifQualityPreset = preset;
+    emit gifQualityPresetChanged();
     save();
 }
 

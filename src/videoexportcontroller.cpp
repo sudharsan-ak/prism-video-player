@@ -45,6 +45,20 @@ VideoExportController::VideoExportController(SettingsStore *settings, QObject *p
     });
 }
 
+VideoExportController::~VideoExportController()
+{
+    // Only discard a partial file if FFmpeg is still encoding.
+    // Preserve a completed temp file if Windows replacement/fallback
+    // failed and its path was reported to the user for recovery.
+    if (m_process.state() != QProcess::NotRunning) {
+        m_process.disconnect(this);
+        m_process.kill();
+        m_process.waitForFinished(2000);
+        if (!m_temporaryOutput.isEmpty())
+            QFile::remove(m_temporaryOutput);
+    }
+}
+
 QString VideoExportController::ffmpegExecutable() const
 {
     const QString adjacent = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg.exe");
@@ -83,10 +97,11 @@ QUrl VideoExportController::suggestedGifOutputUrl(const QString &sourcePath) con
 
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
-                                      double playbackSpeed, bool muteAudio)
+                                      double playbackSpeed, bool muteAudio,
+                                      const QString &encodingPreset)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, muteAudio, false);
+                     false, playbackSpeed, muteAudio, false, encodingPreset, QString());
 }
 
 bool VideoExportController::startReplaceTrim(const QString &sourcePath,
@@ -94,21 +109,24 @@ bool VideoExportController::startReplaceTrim(const QString &sourcePath,
                                             double playbackSpeed, bool muteAudio)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds,
-                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed, muteAudio, false);
+                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed, muteAudio,
+                     false, QString(), QString());
 }
 
 bool VideoExportController::startGif(const QString &sourcePath, double startSeconds,
                                      double endSeconds, const QUrl &destination,
-                                     double playbackSpeed)
+                                     double playbackSpeed, const QString &gifQuality)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, true, true);
+                     false, playbackSpeed, true, true, QString(), gifQuality);
 }
 
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
                                       bool replaceOriginal, double playbackSpeed,
-                                      bool muteAudio, bool animatedGif)
+                                      bool muteAudio, bool animatedGif,
+                                      const QString &encodingPreset,
+                                      const QString &gifQuality)
 {
     if (m_busy)
         return false;
@@ -174,6 +192,23 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     m_sourceModified = source.lastModified();
     m_replaceOriginal = replaceOriginal;
     m_exportingGif = animatedGif;
+    m_encodingPresetForJob = encodingPreset.isEmpty()
+        ? (m_settings ? m_settings->encodingPreset() : QStringLiteral("veryfast"))
+        : encodingPreset;
+    m_gifQualityForJob = gifQuality.isEmpty()
+        ? (m_settings ? m_settings->gifQualityPreset() : QStringLiteral("balanced"))
+        : gifQuality;
+    // Only allow known values into FFmpeg's argument list.
+    if (m_encodingPresetForJob != QStringLiteral("ultrafast") &&
+        m_encodingPresetForJob != QStringLiteral("veryfast") &&
+        m_encodingPresetForJob != QStringLiteral("fast") &&
+        m_encodingPresetForJob != QStringLiteral("medium") &&
+        m_encodingPresetForJob != QStringLiteral("slow"))
+        m_encodingPresetForJob = QStringLiteral("veryfast");
+    if (m_gifQualityForJob != QStringLiteral("high") &&
+        m_gifQualityForJob != QStringLiteral("balanced") &&
+        m_gifQualityForJob != QStringLiteral("compact"))
+        m_gifQualityForJob = QStringLiteral("balanced");
     m_playbackSpeed = playbackSpeed;
     m_keepBackupForJob = m_settings && m_settings->keepBackupOnReplace();
     m_temporaryOutput = QDir(output.absolutePath()).filePath(
@@ -210,16 +245,25 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral("-i"), source.absoluteFilePath()
     };
     if (animatedGif) {
-        // GIF contains no sound. Using the complete video to generate one
-        // palette delays the first encoded GIF frame until the full clip
-        // is analyzed. Sample up to the first two output seconds for a
-        // faster start, while retaining a stable palette for the GIF.
-        // Trade-off: later scene changes may be less accurately colored.
+        // Palette from the first two output seconds keeps GIF startup
+        // fast. Balanced/Compact prioritize file size and fewer colors.
+        const bool high = m_gifQualityForJob == QStringLiteral("high");
+        const bool compact = m_gifQualityForJob == QStringLiteral("compact");
+        const int width = high ? 640 : (compact ? 360 : 480);
+        const int fps = high ? 12 : (compact ? 8 : 10);
+        const int colors = high ? 256 : (compact ? 96 : 128);
+        const QString paletteOptions = high ? QStringLiteral("stats_mode=full")
+            : QStringLiteral("max_colors=%1:stats_mode=diff").arg(colors);
+        const QString useOptions = high ? QStringLiteral("dither=sierra2_4a")
+            : QStringLiteral("dither=bayer:bayer_scale=%1:diff_mode=rectangle")
+                  .arg(compact ? 4 : 3);
         const QString gifFilter = QStringLiteral(
-            "[0:v]setpts=(PTS-STARTPTS)/%1,fps=12,"
-            "scale='min(640,iw)':-1:flags=lanczos,split[frames][colors];"
-            "[colors]trim=duration=2,setpts=PTS-STARTPTS,palettegen=stats_mode=full[palette];"
-            "[frames][palette]paletteuse=dither=sierra2_4a[gifout]").arg(speed);
+            "[0:v]setpts=(PTS-STARTPTS)/%1,fps=%2,"
+            "scale='min(%3,iw)':-1:flags=lanczos,split[frames][colors];"
+            "[colors]trim=duration=2,setpts=PTS-STARTPTS,"
+            "palettegen=%4[palette];"
+            "[frames][palette]paletteuse=%5[gifout]")
+                .arg(speed).arg(fps).arg(width).arg(paletteOptions).arg(useOptions);
         args << QStringLiteral("-filter_complex") << gifFilter
              << QStringLiteral("-map") << QStringLiteral("[gifout]")
              << QStringLiteral("-an")
@@ -238,7 +282,7 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         }
         args << QStringLiteral("-c:v") << QStringLiteral("libx264")
              << QStringLiteral("-preset")
-             << (m_settings ? m_settings->encodingPreset() : QStringLiteral("veryfast"))
+             << m_encodingPresetForJob
              << QStringLiteral("-crf") << QStringLiteral("18")
              << QStringLiteral("-vf") << videoFilter
              << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
