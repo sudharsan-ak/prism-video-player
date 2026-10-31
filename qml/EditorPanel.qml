@@ -38,6 +38,7 @@ Rectangle {
     signal closeRequested()
     signal exportRequested()
     signal exportGifRequested()
+    signal replaceModeRequested()
      signal previewRequested()
     signal resetRequested()
     signal queueRequested()
@@ -413,19 +414,22 @@ Rectangle {
                             (settingsStore.mp4ExportMode === "replace"
                                 ? (root.canReplace && !exportQueue.hasOutstanding &&
                                    !videoExportController.busy) : exportQueue.canQueue)
-                        text: "MP4"
+                        text: settingsStore.mp4ExportMode === "replace" ? "Replace MP4" : "MP4"
                         onClicked: root.exportRequested()
                         font.bold: true
-                        font.pixelSize: 12
+                        font.pixelSize: settingsStore.mp4ExportMode === "replace" ? 11 : 12
                         background: Rectangle {
                             radius: 7
-                            color: parent.enabled ? (root.tokens.accentSolid || "#2BFA83")
-                                                   : (root.tokens.panelBorder || "#444")
+                            color: !parent.enabled ? (root.tokens.panelBorder || "#444")
+                                : settingsStore.mp4ExportMode === "replace"
+                                    ? "#BD764A" : (root.tokens.accentSolid || "#2BFA83")
                         }
                         contentItem: Text {
                             text: parent.text
                             font: parent.font
-                            color: root.tokens.videoCardBackground || "#092111"
+                            color: settingsStore.mp4ExportMode === "replace"
+                                ? "#FFFFFF"
+                                : (root.tokens.videoCardBackground || "#092111")
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -622,10 +626,15 @@ Rectangle {
             }
             ModeChoice {
                 text: "Replace original MP4"
-                detail: "Confirm before replacing; queue must be empty"
+                detail: "Confirm mode once; future MP4 clicks replace directly"
                 selected: settingsStore.mp4ExportMode === "replace"
                 enabled: root.canReplace
-                onClicked: settingsStore.mp4ExportMode = "replace"
+                onClicked: {
+                    if (settingsStore.mp4ExportMode !== "replace") {
+                        exportModePopup.close();
+                        root.replaceModeRequested();
+                    }
+                }
             }
             Rectangle {
                 Layout.fillWidth: true

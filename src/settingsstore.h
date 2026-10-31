@@ -45,6 +45,8 @@ public:
     void setGifQualityPreset(const QString &preset);
     QString mp4ExportMode() const { return m_mp4ExportMode; }
     void setMp4ExportMode(const QString &mode);
+    // Only call after explicit confirmation in the export mode dialog.
+    Q_INVOKABLE void confirmReplaceMode();
     QString gifExportMode() const { return m_gifExportMode; }
     void setGifExportMode(const QString &mode);
 
@@ -87,6 +89,9 @@ private:
     QString m_encodingPreset = QStringLiteral("veryfast");
     QString m_gifQualityPreset = QStringLiteral("balanced");
     QString m_mp4ExportMode = QStringLiteral("auto");
+    // Old builds confirmed each replace action instead. Require users of
+    // those settings to opt into the new one-click destructive behavior.
+    bool m_replaceModeConfirmed = false;
     QString m_gifExportMode = QStringLiteral("auto");
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}

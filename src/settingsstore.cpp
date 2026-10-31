@@ -70,9 +70,15 @@ void SettingsStore::load()
         gifPreset == QStringLiteral("compact"))
         m_gifQualityPreset = gifPreset;
     const QString mp4Mode = root.value("mp4ExportMode").toString(QStringLiteral("auto"));
-    if (mp4Mode == QStringLiteral("auto") || mp4Mode == QStringLiteral("saveAs") ||
-        mp4Mode == QStringLiteral("replace"))
+    if (mp4Mode == QStringLiteral("auto") || mp4Mode == QStringLiteral("saveAs"))
         m_mp4ExportMode = mp4Mode;
+    else if (mp4Mode == QStringLiteral("replace") &&
+             root.value("replaceModeConfirmed").toBool(false)) {
+        // Existing users who selected "replace" in an older version
+        // did NOT authorize future replacements without a prompt.
+        m_mp4ExportMode = mp4Mode;
+        m_replaceModeConfirmed = true;
+    }
     const QString gifMode = root.value("gifExportMode").toString(QStringLiteral("auto"));
     if (gifMode == QStringLiteral("auto") || gifMode == QStringLiteral("saveAs"))
         m_gifExportMode = gifMode;
@@ -99,6 +105,7 @@ void SettingsStore::save()
     root["encodingPreset"] = m_encodingPreset;
     root["gifQualityPreset"] = m_gifQualityPreset;
     root["mp4ExportMode"] = m_mp4ExportMode;
+    root["replaceModeConfirmed"] = m_replaceModeConfirmed;
     root["gifExportMode"] = m_gifExportMode;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
@@ -189,12 +196,24 @@ void SettingsStore::setGifQualityPreset(const QString &preset)
 
 void SettingsStore::setMp4ExportMode(const QString &mode)
 {
-    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs") &&
-        mode != QStringLiteral("replace"))
+    // "replace" can be enabled only through confirmReplaceMode(),
+    // following the explicit one-time warning to the user.
+    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs"))
         return;
-    if (mode == m_mp4ExportMode)
+    if (mode == m_mp4ExportMode && !m_replaceModeConfirmed)
         return;
     m_mp4ExportMode = mode;
+    m_replaceModeConfirmed = false;
+    emit mp4ExportModeChanged();
+    save();
+}
+
+void SettingsStore::confirmReplaceMode()
+{
+    if (m_mp4ExportMode == QStringLiteral("replace") && m_replaceModeConfirmed)
+        return;
+    m_replaceModeConfirmed = true;
+    m_mp4ExportMode = QStringLiteral("replace");
     emit mp4ExportModeChanged();
     save();
 }

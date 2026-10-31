@@ -174,7 +174,14 @@ ApplicationWindow {
                 toast.show("Finish queued exports before replacing the original.", true);
                 return;
             }
-            replaceConfirmDialog.open();
+            // User already acknowledged this destructive export mode when
+            // selecting it in the settings popup. Do not prompt again.
+            stopRangePreview();
+            if (!videoExportController.startReplaceTrim(editSourcePath, editStart,
+                                                         editEnd, editSpeed,
+                                                         editVolumePercent)) {
+                toast.show(videoExportController.error || "Could not start replacement.", true);
+            }
         } else {
             enqueueCurrentTrim(false);
         }
@@ -413,7 +420,8 @@ ApplicationWindow {
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
-                 onQueueRequested: exportQueuePopup.open()
+                onReplaceModeRequested: replaceModeConfirmDialog.open()
+                onQueueRequested: exportQueuePopup.open()
                  onPreviewRequested: prismWindow.previewEditRange()
                 onResetRequested: {
                     prismWindow.editStart = 0;
@@ -613,30 +621,27 @@ ApplicationWindow {
     }
 
     Dialog {
-        id: replaceConfirmDialog
+        id: replaceModeConfirmDialog
         modal: true
         width: 450
         anchors.centerIn: parent
         padding: 18
-        title: "Replace original MP4?"
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        title: "Enable one-click Replace Original?"
+        standardButtons: Dialog.Yes | Dialog.No
         closePolicy: Popup.CloseOnEscape
         onAccepted: {
-            if (exportQueue.hasOutstanding || videoExportController.busy) {
-                toast.show("Finish all queued exports before replacing the original.", true);
+            if (!prismWindow.editMode ||
+                !prismWindow.editSourcePath.toLowerCase().endsWith(".mp4"))
                 return;
-            }
-            prismWindow.stopRangePreview();
-            videoExportController.startReplaceTrim(prismWindow.editSourcePath,
-                                                   prismWindow.editStart,
-                                                   prismWindow.editEnd,
-                                                   prismWindow.editSpeed,
-                                                   prismWindow.editVolumePercent);
+            // Only here, after explicit approval, is replacement enabled
+            // and persisted. Selecting another export mode revokes it.
+            settingsStore.confirmReplaceMode();
+            toast.show("Replace MP4 enabled. Future clicks replace without another prompt.", false);
         }
         background: Rectangle {
             radius: 12
             color: prismWindow.tokens.panelGlassStrong || "#242331"
-            border.color: prismWindow.tokens.accentSolid || "#A89BFF"
+            border.color: "#C88249"
             border.width: 1
         }
         contentItem: Text {
@@ -644,18 +649,17 @@ ApplicationWindow {
             wrapMode: Text.WordWrap
             color: prismWindow.tokens.textPrimary || "#fff"
             font.pixelSize: 12
-            text: "Prism will encode the trimmed clip first and then replace the source MP4. "
+            text: "When enabled, clicking Replace MP4 will immediately encode "
+                + "the currently selected trim over the original MP4. "
+                + "You will NOT see another confirmation for each export.\n\n"
                 + (settingsStore.keepBackupOnReplace
-                    ? "A timestamped backup will be kept beside it.\n\n"
-                    : "No backup will be kept. This cannot be undone.\n\n")
-                + (prismWindow.editVolumePercent === 0
-                    ? "Audio will be REMOVED from the exported MP4. "
-                    : prismWindow.editVolumePercent === 100
-                        ? "The first audio track keeps its original level. "
-                        : "The first audio track will be exported at " +
-                          prismWindow.editVolumePercent + "% of the source level. ")
-                + "Other audio tracks and subtitles will NOT be preserved.\n\n"
-                + "Choose Export edited copy instead if you want to keep the original untouched."
+                    ? "Backups are ON: Prism will retain a timestamped original backup.\n\n"
+                    : "Backups are OFF: the original will not be recoverable after a "
+                        + "successful replacement. This cannot be undone.\n\n")
+                + "The current trim range, speed, and audio volume will be applied. "
+                + "Replacement still waits until all queued exports finish.\n\n"
+                + "Do you want to save Replace Original as your MP4 button behavior? "
+                + "You can change it later using the gear."
         }
     }
 

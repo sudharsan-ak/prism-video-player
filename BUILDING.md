@@ -274,3 +274,28 @@ content; fine detail and motion may be reduced on Balanced/Compact.
   40%, ordinary player volume restoration, queue several MP4 exports
   with different audio levels, test speed-adjusted exports and
   replacement on a disposable MP4, and check the popup in all themes.
+
+## One-time authorization for Replace Original mode
+
+- Selecting **Replace original MP4** in the compact export gear now
+  displays an explicit Yes/No warning *before* that MP4 mode is saved.
+  The warning says future Replace MP4 clicks overwrite the original
+  without another confirmation; it reports whether backups are ON/OFF.
+  No replacement runs simply by selecting the setting.
+- **Yes** saves and activates the one-click Replace Original mode.
+  **No** keeps the previous MP4 mode unchanged. When active, the
+  MP4 button is visibly labeled **Replace MP4** with a warning color.
+  Clicking it starts replacement immediately using the current trim,
+  speed and audio gain, with no second dialog. All original-export safety
+  rules and queue-exclusivity checks remain unchanged.
+- Switching MP4 mode to Quick Copy or Save As revokes approval. Choosing
+  Replace Original again requires the explicit warning again.
+- **Migration:** older settings.json files may already contain
+  `mp4ExportMode: "replace"`, but that version confirmed *each* export.
+  Unless settings also records `replaceModeConfirmed: true`, Prism
+  safely resets the MP4 mode to Quick Copy on upgrade. The user must
+  select Replace Original again to authorize one-click replacement.
+- Acceptance: test Yes/No, mode persistence after restart, mode switching,
+  migration of old settings, queue blocking, and replacement with backup
+  ON/OFF using disposable MP4 files. Confirm that choosing a mode never
+  starts an export by itself and the subsequent Replace MP4 click does.
