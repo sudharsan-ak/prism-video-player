@@ -371,17 +371,24 @@ void VideoExportController::finished(int exitCode, QProcess::ExitStatus exitStat
 
 void VideoExportController::markCompleted(const QString &outputPath, bool replaced)
 {
+    // A successful fallback copy does not mean the requested replacement
+    // succeeded. Preserve the failure reason BEFORE the completed signal
+    // so QML shows a warning rather than the normal export-success toast.
+    const bool replacementFellBackToCopy = m_replaceOriginal && !replaced;
     m_lastOutput = QUrl::fromLocalFile(outputPath);
     m_lastWasReplacement = replaced;
     m_progress = 1.0;
     m_busy = false;
     m_replacePending = false;
-    m_status = replaced
-        ? (m_keepBackupForJob ? QStringLiteral("Original replaced. Backup saved.")
-                              : QStringLiteral("Original replaced. No backup requested."))
-        : (m_exportingGif ? QStringLiteral("Animated GIF saved.")
-                           : QStringLiteral("Edited MP4 saved."));
-    m_error.clear();
+    m_status = replacementFellBackToCopy
+        ? QStringLiteral("Replacement not confirmed. Edited copy saved; inspect original and backup.")
+        : replaced
+            ? (m_keepBackupForJob ? QStringLiteral("Original replaced. Backup saved.")
+                                  : QStringLiteral("Original replaced. No backup requested."))
+            : (m_exportingGif ? QStringLiteral("Animated GIF saved.")
+                               : QStringLiteral("Edited MP4 saved."));
+    if (!replacementFellBackToCopy)
+        m_error.clear();
     m_temporaryOutput.clear();
     emit progressChanged();
     emit stateChanged();
@@ -450,10 +457,11 @@ void VideoExportController::saveFallbackCopy(const QString &reason)
         emit stateChanged();
         return;
     }
-    markCompleted(output, false);
-    m_status = QStringLiteral("Replacement not confirmed. Edited copy saved; inspect original and backup.");
+    // Set the reason before markCompleted() emits stateChanged/completed.
+    // The existing QML onCompleted handler can now distinguish this from
+    // a normal MP4 copy and tell the user to inspect the original.
     m_error = reason;
-    emit stateChanged();
+    markCompleted(output, false);
 }
 
 void VideoExportController::fail(const QString &message)
