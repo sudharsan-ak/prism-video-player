@@ -45,6 +45,7 @@ qt_add_qml_module(Prism
         qml/SettingsMenu.qml
         qml/PlaybackMenu.qml
         qml/MoreMenu.qml
+        qml/ThemedSeekBar.qml
         qml/ThemedComboBox.qml
         qml/ContextMenu.qml
         qml/LibraryPanel.qml

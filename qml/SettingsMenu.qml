@@ -24,6 +24,28 @@ Menu {
         }
     }
     MenuSeparator {}
+    Menu {
+        title: "Seek bar thickness"
+        MenuItem {
+            text: "Slim (4px)"
+            checkable: true
+            checked: settingsStore.seekBarThickness === "slim"
+            onTriggered: settingsStore.seekBarThickness = "slim"
+        }
+        MenuItem {
+            text: "Medium (6px)"
+            checkable: true
+            checked: settingsStore.seekBarThickness === "medium"
+            onTriggered: settingsStore.seekBarThickness = "medium"
+        }
+        MenuItem {
+            text: "Thick (8px)"
+            checkable: true
+            checked: settingsStore.seekBarThickness === "thick"
+            onTriggered: settingsStore.seekBarThickness = "thick"
+        }
+    }
+    MenuSeparator {}
     MenuItem {
         text: "Resume playback position"
         checkable: true

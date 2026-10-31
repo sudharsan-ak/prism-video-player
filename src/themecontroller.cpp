@@ -55,6 +55,8 @@ void ThemeController::buildThemeTable()
         t["videoCardBackground"] = "#141210";
         t["videoCardShadow"] = "#2E5A4628";
         t["blurRadius"] = 20;
+        t["seekTrack"] = "#B6AA98";
+        t["seekThumbEdge"] = "#FFFDF7";
         m_themes["warmGlass"] = t;
         m_themeOrder.append(qMakePair(QString("warmGlass"), QString("Warm Glass")));
     }
@@ -74,6 +76,8 @@ void ThemeController::buildThemeTable()
         t["videoCardBackground"] = "#0D1418";
         t["videoCardShadow"] = "#2E284655";
         t["blurRadius"] = 20;
+        t["seekTrack"] = "#ABC2CD";
+        t["seekThumbEdge"] = "#F8FCFD";
         m_themes["coolGlass"] = t;
         m_themeOrder.append(qMakePair(QString("coolGlass"), QString("Cool Glass")));
     }
@@ -93,6 +97,8 @@ void ThemeController::buildThemeTable()
         t["videoCardBackground"] = "#000000";
         t["videoCardShadow"] = "#66000000";
         t["blurRadius"] = 22;
+        t["seekTrack"] = "#4A4A60";
+        t["seekThumbEdge"] = "#242331";
         m_themes["midnightGlass"] = t;
         m_themeOrder.append(qMakePair(QString("midnightGlass"), QString("Midnight Glass")));
     }
@@ -112,6 +118,8 @@ void ThemeController::buildThemeTable()
         t["videoCardBackground"] = "#000000";
         t["videoCardShadow"] = "#00000000";
         t["blurRadius"] = 0;
+        t["seekTrack"] = "#383838";
+        t["seekThumbEdge"] = "#000000";
         m_themes["oledNeon"] = t;
         m_themeOrder.append(qMakePair(QString("oledNeon"), QString("OLED Neon")));
     }
@@ -132,6 +140,8 @@ void ThemeController::buildThemeTable()
         t["videoCardShadow"] = "#2E000000";
         t["blurRadius"] = 0;
         t["neumorphic"] = true;
+        t["seekTrack"] = "#C4C0B7";
+        t["seekThumbEdge"] = "#F3F1EC";
         m_themes["softNeumorphic"] = t;
         m_themeOrder.append(qMakePair(QString("softNeumorphic"), QString("Soft Neumorphic")));
     }
@@ -152,6 +162,8 @@ void ThemeController::buildThemeTable()
         t["videoCardShadow"] = "#00000000";
         t["blurRadius"] = 0;
         t["monospace"] = true;
+        t["seekTrack"] = "#28505B";
+        t["seekThumbEdge"] = "#00212B";
         m_themes["terminalFlat"] = t;
         m_themeOrder.append(qMakePair(QString("terminalFlat"), QString("Terminal Flat")));
     }
