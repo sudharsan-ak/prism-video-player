@@ -82,6 +82,9 @@ QVariantList ExportQueueController::jobs() const
         item.insert(QStringLiteral("speed"), job.speed);
         item.insert(QStringLiteral("mute"), job.audioVolumePercent == 0);
         item.insert(QStringLiteral("audioVolume"), job.audioVolumePercent);
+        item.insert(QStringLiteral("rotation"), job.quarterTurns * 90);
+        item.insert(QStringLiteral("cropWidth"), job.cropWidth);
+        item.insert(QStringLiteral("cropHeight"), job.cropHeight);
         item.insert(QStringLiteral("preset"), job.format == QStringLiteral("GIF")
             ? job.gifPreset : job.mp4Preset);
         result.append(item);
@@ -150,19 +153,27 @@ ExportQueueController::Job *ExportQueueController::findJob(int id)
 }
 
 bool ExportQueueController::queueMp4(const QString &source, double start, double end,
-                                     const QUrl &destination, double speed, int audioVolumePercent)
+                                     const QUrl &destination, double speed, int audioVolumePercent,
+                                     int quarterTurns, double cropX, double cropY,
+                                     double cropWidth, double cropHeight)
 {
-    return enqueue(source, start, end, destination, speed, audioVolumePercent, false);
+    return enqueue(source, start, end, destination, speed, audioVolumePercent, false,
+                   quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
 bool ExportQueueController::queueGif(const QString &source, double start, double end,
-                                     const QUrl &destination, double speed)
+                                     const QUrl &destination, double speed, int quarterTurns,
+                                     double cropX, double cropY, double cropWidth,
+                                     double cropHeight)
 {
-    return enqueue(source, start, end, destination, speed, 0, true);
+    return enqueue(source, start, end, destination, speed, 0, true,
+                   quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
 bool ExportQueueController::enqueue(const QString &source, double start, double end,
-                                    const QUrl &destination, double speed, int audioVolumePercent, bool gif)
+                                    const QUrl &destination, double speed, int audioVolumePercent, bool gif,
+                                    int quarterTurns, double cropX, double cropY,
+                                    double cropWidth, double cropHeight)
 {
     m_lastError.clear();
     auto reject = [this](const QString &error) {
@@ -185,6 +196,13 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
         end - start < 0.1 || !std::isfinite(speed) || speed < 0.25 || speed > 2.0 ||
         audioVolumePercent < 0 || audioVolumePercent > 100)
         return reject(QStringLiteral("Choose a valid trim range and a speed from 0.25x to 2x."));
+    const bool validCrop = quarterTurns >= 0 && quarterTurns <= 3 &&
+        std::isfinite(cropX) && std::isfinite(cropY) &&
+        std::isfinite(cropWidth) && std::isfinite(cropHeight) &&
+        cropX >= 0 && cropY >= 0 && cropWidth >= 0.05 && cropHeight >= 0.05 &&
+        cropX + cropWidth <= 1.000001 && cropY + cropHeight <= 1.000001;
+    if (!validCrop)
+        return reject(QStringLiteral("Choose a valid crop and rotation."));
     if (output.suffix().compare(gif ? QStringLiteral("gif") :
                                 QStringLiteral("mp4"), Qt::CaseInsensitive) != 0)
         return reject(QStringLiteral("Choose a matching MP4 or GIF filename."));
@@ -201,6 +219,11 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
     job.end = end;
     job.speed = speed;
     job.audioVolumePercent = audioVolumePercent;
+    job.quarterTurns = quarterTurns;
+    job.cropX = cropX;
+    job.cropY = cropY;
+    job.cropWidth = cropWidth;
+    job.cropHeight = cropHeight;
     job.sourceSize = input.size();
     job.sourceModified = input.lastModified();
     job.mp4Preset = m_settings->encodingPreset();
@@ -244,9 +267,11 @@ void ExportQueueController::startNext()
 
         const bool started = job.format == QStringLiteral("GIF")
             ? m_worker->startGif(job.source, job.start, job.end,
-                  QUrl::fromLocalFile(job.output), job.speed, job.gifPreset)
+                  QUrl::fromLocalFile(job.output), job.speed, job.gifPreset,
+                  job.quarterTurns, job.cropX, job.cropY, job.cropWidth, job.cropHeight)
             : m_worker->startTrim(job.source, job.start, job.end,
-                  QUrl::fromLocalFile(job.output), job.speed, job.audioVolumePercent, job.mp4Preset);
+                  QUrl::fromLocalFile(job.output), job.speed, job.audioVolumePercent, job.mp4Preset,
+                  job.quarterTurns, job.cropX, job.cropY, job.cropWidth, job.cropHeight);
         if (!started || !m_worker->busy())
             finishActive(false, m_worker->error());
         return;
