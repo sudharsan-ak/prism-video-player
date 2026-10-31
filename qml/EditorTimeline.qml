@@ -361,7 +361,7 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             TrimButton {
-                text: "Export..."
+                text: "Queue MP4"
                 enabled: exportQueue.canQueue
                 onClicked: root.exportRequested()
             }

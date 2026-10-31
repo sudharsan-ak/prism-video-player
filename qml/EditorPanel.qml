@@ -34,6 +34,8 @@ Rectangle {
     signal closeRequested()
     signal exportRequested()
     signal exportGifRequested()
+    signal chooseMp4DestinationRequested()
+    signal chooseGifDestinationRequested()
     signal replaceRequested()
     signal previewRequested()
     signal resetRequested()
@@ -304,7 +306,7 @@ Rectangle {
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
                 enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
-                text: "Export edited copy..."
+                text: "Add MP4 to export queue"
                 onClicked: root.exportRequested()
                 font.pixelSize: 12
                 font.bold: true
@@ -327,7 +329,7 @@ Rectangle {
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
                 enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
-                text: "Export animated GIF..."
+                text: "Add GIF to export queue"
                 onClicked: root.exportGifRequested()
                 font.pixelSize: 12
                 background: Rectangle {
@@ -342,6 +344,38 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     font: parent.font
+                }
+            }
+
+            Button {
+                id: chooseOutputLocation
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
+                text: "Choose output location... ▾"
+                onClicked: locationMenu.open()
+                font.pixelSize: 11
+                flat: true
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textSecondary || "#aaa"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Menu {
+                    id: locationMenu
+                    parent: chooseOutputLocation
+                    y: chooseOutputLocation.height
+                    MenuItem {
+                        text: "Save MP4 as..."
+                        onTriggered: root.chooseMp4DestinationRequested()
+                    }
+                    MenuItem {
+                        text: "Save GIF as..."
+                        onTriggered: root.chooseGifDestinationRequested()
+                    }
                 }
             }
 

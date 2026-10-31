@@ -211,3 +211,19 @@ content; fine detail and motion may be reduced on Balanced/Compact.
    animation smoothness on the same clip; restart to confirm
    preset persistence.
 6. Try closing Prism during an active export and verify the warning.
+
+## One-click export queue workflow
+
+- **Add MP4 to export queue** and **Add GIF to export queue** immediately
+  submit the selected trim without opening a Windows Save As dialog.
+  The trim timeline's quick export button now queues an MP4 the same way.
+- Prism automatically chooses the source video's folder and a unique
+  `<source>-trimmed.mp4` or `<source>-trimmed.gif` filename; if the name
+  already exists or is reserved by the queue, it adds `-2`, `-3`, etc.
+- For a custom filename or directory, use **Choose output location...**
+  and select **Save MP4 as...** or **Save GIF as...**. These are optional
+  and still enqueue after confirming the destination.
+- Replace Original continues to use its exclusive confirmation dialog.
+- Verify direct queue on repeated clicks, auto-incremented filenames,
+  no Save As window on primary actions, optional Save As operations,
+  job snapshots, and normal queued progress.

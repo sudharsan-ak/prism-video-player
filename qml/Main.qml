@@ -126,6 +126,26 @@ ApplicationWindow {
         toggleEditPlayback();
     }
 
+    function enqueueCurrentTrim(animatedGif) {
+        if (!editMode || !exportQueue.canQueue)
+            return;
+        const destination = exportQueue.suggestedOutputUrl(editSourcePath, animatedGif);
+        if (!destination || destination.toString().length === 0) {
+            toast.show("Could not find an available output filename. Choose a location instead.", true);
+            return;
+        }
+        const ok = animatedGif
+            ? exportQueue.queueGif(editSourcePath, editStart, editEnd,
+                                   destination, editSpeed)
+            : exportQueue.queueMp4(editSourcePath, editStart, editEnd,
+                                   destination, editSpeed, editMuted);
+        if (!ok) {
+            toast.show(exportQueue.lastError, true);
+            return;
+        }
+        toast.show((animatedGif ? "GIF" : "MP4") + " added to export queue.", false);
+    }
+
     function openGifSaveDialog() {
         if (!editMode || !exportQueue.canQueue)
             return;
@@ -306,7 +326,7 @@ ApplicationWindow {
                         prismWindow.editStart = 0;
                         prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
                     }
-                    onExportRequested: prismWindow.openTrimSaveDialog()
+                    onExportRequested: prismWindow.enqueueCurrentTrim(false)
                 }
             }
 
@@ -331,8 +351,10 @@ ApplicationWindow {
                 editSpeed: prismWindow.editSpeed
                 muteAudio: prismWindow.editMuted
                 onCloseRequested: prismWindow.leaveEditing()
-                onExportRequested: prismWindow.openTrimSaveDialog()
-                onExportGifRequested: prismWindow.openGifSaveDialog()
+                onExportRequested: prismWindow.enqueueCurrentTrim(false)
+                onExportGifRequested: prismWindow.enqueueCurrentTrim(true)
+                onChooseMp4DestinationRequested: prismWindow.openTrimSaveDialog()
+                onChooseGifDestinationRequested: prismWindow.openGifSaveDialog()
                 onQueueRequested: exportQueuePopup.open()
                 onReplaceRequested: replaceConfirmDialog.open()
                 onPreviewRequested: prismWindow.previewEditRange()
