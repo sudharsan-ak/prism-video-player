@@ -622,47 +622,270 @@ ApplicationWindow {
 
     Dialog {
         id: replaceModeConfirmDialog
+        parent: Overlay.overlay
         modal: true
-        width: 450
-        anchors.centerIn: parent
-        padding: 18
-        title: "Enable one-click Replace Original?"
-        standardButtons: Dialog.Yes | Dialog.No
+        focus: true
+        x: Math.round((prismWindow.width - width) / 2)
+        y: Math.round((prismWindow.height - height) / 2)
+        width: Math.min(478, prismWindow.width - 36)
+        height: Math.min(382, prismWindow.height - 28)
+        padding: 0
+        // A custom header and footer prevent Qt's native button palette
+        // from appearing in light themes or ignoring Prism's hover styles.
+        header: null
+        footer: null
+        standardButtons: Dialog.NoButton
         closePolicy: Popup.CloseOnEscape
+
+        // Pick accessible text contrast for every theme's solid accent.
+        function accentForeground() {
+            const hex = String(prismWindow.tokens.accentSolid || "#39FF88").replace("#", "");
+            if (hex.length !== 6)
+                return "#111111";
+            const channel = function(i) {
+                const v = parseInt(hex.substring(i, i + 2), 16) / 255;
+                return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            };
+            const luminance = 0.2126 * channel(0) +
+                              0.7152 * channel(2) + 0.0722 * channel(4);
+            return luminance > 0.179 ? "#111111" : "#FFFFFF";
+        }
+
         onAccepted: {
             if (!prismWindow.editMode ||
                 !prismWindow.editSourcePath.toLowerCase().endsWith(".mp4"))
                 return;
-            // Only here, after explicit approval, is replacement enabled
-            // and persisted. Selecting another export mode revokes it.
+            // Explicit approval only changes the selected mode.
+            // No export runs when this dialog is accepted.
             settingsStore.confirmReplaceMode();
             toast.show("Replace MP4 enabled. Future clicks replace without another prompt.", false);
         }
+
         background: Rectangle {
-            radius: 12
-            color: prismWindow.tokens.panelGlassStrong || "#242331"
-            border.color: "#C88249"
+            radius: 14
+            color: prismWindow.tokens.panelGlassStrong || "#202129"
             border.width: 1
+            border.color: prismWindow.tokens.accentSolid || "#39FF88"
         }
-        contentItem: Text {
-            width: 400
-            wrapMode: Text.WordWrap
-            color: prismWindow.tokens.textPrimary || "#fff"
-            font.pixelSize: 12
-            text: "When enabled, clicking Replace MP4 will immediately encode "
-                + "the currently selected trim over the original MP4. "
-                + "You will NOT see another confirmation for each export.\n\n"
-                + (settingsStore.keepBackupOnReplace
-                    ? "Backups are ON: Prism will retain a timestamped original backup.\n\n"
-                    : "Backups are OFF: the original will not be recoverable after a "
-                        + "successful replacement. This cannot be undone.\n\n")
-                + "The current trim range, speed, and audio volume will be applied. "
-                + "Replacement still waits until all queued exports finish.\n\n"
-                + "Do you want to save Replace Original as your MP4 button behavior? "
-                + "You can change it later using the gear."
+
+        contentItem: ColumnLayout {
+            spacing: 0
+
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 61
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 12
+                    spacing: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Text {
+                            text: "Enable one-click replacement?"
+                            color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                            font.pixelSize: 15
+                            font.bold: true
+                        }
+                        Text {
+                            text: "MP4 export behavior"
+                            color: prismWindow.tokens.textSecondary || "#AAAAAA"
+                            font.pixelSize: 11
+                        }
+                    }
+                    Button {
+                        id: replaceDialogClose
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        text: "✕"
+                        onClicked: replaceModeConfirmDialog.reject()
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        background: Rectangle {
+                            radius: 7
+                            color: replaceDialogClose.hovered
+                                ? (prismWindow.tokens.accentTint || "#2439FF88")
+                                : "transparent"
+                            border.width: replaceDialogClose.activeFocus ? 1 : 0
+                            border.color: prismWindow.tokens.accentSolid || "#39FF88"
+                        }
+                        contentItem: Text {
+                            text: replaceDialogClose.text
+                            font.pixelSize: 12
+                            color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Close without enabling"
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: prismWindow.tokens.panelBorder || "#444444"
+            }
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 13
+
+                    Item { Layout.preferredHeight: 3 }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 18
+                        Layout.rightMargin: 18
+                        text: "Once enabled, clicking Replace MP4 will immediately replace the original with your selected trim. No further confirmation will appear."
+                        color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 18
+                        Layout.rightMargin: 18
+                        implicitHeight: backupInfo.implicitHeight + 24
+                        radius: 8
+                        color: prismWindow.tokens.accentTint || "#2439FF88"
+                        border.width: 1
+                        border.color: prismWindow.tokens.accentSolid || "#39FF88"
+                        ColumnLayout {
+                            id: backupInfo
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 4
+                            Text {
+                                text: settingsStore.keepBackupOnReplace
+                                    ? "BACKUP ENABLED" : "BACKUP DISABLED"
+                                color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: settingsStore.keepBackupOnReplace
+                                    ? "Prism will retain a timestamped copy of the original."
+                                    : "Your original will be overwritten without a backup. This cannot be undone."
+                                wrapMode: Text.WordWrap
+                                color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 18
+                        Layout.rightMargin: 18
+                        text: "The current trim range, speed and audio volume will be used. Replacement is unavailable while other exports are queued."
+                        color: prismWindow.tokens.textSecondary || "#AAAAAA"
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 18
+                        Layout.rightMargin: 18
+                        text: "You can change this behavior later using the gear."
+                        color: prismWindow.tokens.textMuted || "#888888"
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Item { Layout.preferredHeight: 8 }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: prismWindow.tokens.panelBorder || "#444444"
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 66
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.topMargin: 12
+                    anchors.bottomMargin: 12
+                    spacing: 10
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        id: cancelReplaceMode
+                        Layout.preferredWidth: 102
+                        Layout.fillHeight: true
+                        text: "Cancel"
+                        onClicked: replaceModeConfirmDialog.reject()
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        background: Rectangle {
+                            radius: 8
+                            color: cancelReplaceMode.down
+                                ? (prismWindow.tokens.accentTint || "#2439FF88")
+                                : cancelReplaceMode.hovered
+                                    ? (prismWindow.tokens.accentTint || "#2439FF88")
+                                    : (prismWindow.tokens.panelGlass || "#25262D")
+                            border.width: 1
+                            border.color: cancelReplaceMode.hovered || cancelReplaceMode.activeFocus
+                                ? (prismWindow.tokens.accentSolid || "#39FF88")
+                                : (prismWindow.tokens.panelBorder || "#444444")
+                        }
+                        contentItem: Text {
+                            text: cancelReplaceMode.text
+                            color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                            font.pixelSize: 12
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    Button {
+                        id: enableReplaceMode
+                        Layout.preferredWidth: 178
+                        Layout.fillHeight: true
+                        text: "Enable Replace MP4"
+                        onClicked: replaceModeConfirmDialog.accept()
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        background: Rectangle {
+                            radius: 8
+                            color: enableReplaceMode.down
+                                ? Qt.darker(prismWindow.tokens.accentSolid || "#39FF88", 1.18)
+                                : enableReplaceMode.hovered
+                                    ? Qt.lighter(prismWindow.tokens.accentSolid || "#39FF88", 1.12)
+                                    : (prismWindow.tokens.accentSolid || "#39FF88")
+                            border.width: enableReplaceMode.activeFocus ? 2 : 0
+                            border.color: prismWindow.tokens.textPrimary || "#FFFFFF"
+                        }
+                        contentItem: Text {
+                            text: enableReplaceMode.text
+                            color: replaceModeConfirmDialog.accentForeground()
+                            font.pixelSize: 12
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
         }
     }
-
     FileDialog {
         id: trimSaveDialog
         title: "Export trimmed video (new MP4)"
