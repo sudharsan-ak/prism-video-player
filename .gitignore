@@ -1,0 +1,16 @@
+# Build output
+/build/
+/dist/
+/_build-scratch-not-the-app/
+
+# Vendored binary dependencies (fetch separately, see BUILDING.md)
+/vendor/
+
+# Planning / internal docs (not part of the public repo)
+/docs/
+
+# Editor / OS cruft
+.vs/
+.vscode/
+*.user
+Thumbs.db
