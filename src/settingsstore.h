@@ -16,6 +16,7 @@ class SettingsStore : public QObject {
     Q_PROPERTY(int volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(QString themeName READ themeName WRITE setThemeName NOTIFY themeNameChanged)
     Q_PROPERTY(bool resumeEnabled READ resumeEnabled WRITE setResumeEnabled NOTIFY resumeEnabledChanged)
+    Q_PROPERTY(QString seekBarThickness READ seekBarThickness WRITE setSeekBarThickness NOTIFY seekBarThicknessChanged)
 
 public:
     explicit SettingsStore(QObject *parent = nullptr);
@@ -27,6 +28,9 @@ public:
     void setThemeName(const QString &name);
     bool resumeEnabled() const { return m_resumeEnabled; }
     void setResumeEnabled(bool enabled);
+
+    QString seekBarThickness() const { return m_seekBarThickness; }
+    void setSeekBarThickness(const QString &thickness);
 
     Q_INVOKABLE void bumpRecent(const QString &path);
     Q_INVOKABLE void clearRecent();
@@ -46,6 +50,7 @@ signals:
     void recentFilesChanged();
     void volumeChanged();
     void themeNameChanged();
+    void seekBarThicknessChanged();
     void resumeEnabledChanged();
 
 private:
@@ -56,6 +61,7 @@ private:
     int m_volume = 80;
     QString m_themeName = QStringLiteral("warmGlass");
     bool m_resumeEnabled = true;
+    QString m_seekBarThickness = QStringLiteral("slim");
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}
 };

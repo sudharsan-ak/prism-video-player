@@ -14,7 +14,6 @@ Rectangle {
     property var tokens: themeController.tokens
     property var mpv: null
 
-    property real scrubPosition: -1 // -1 = not scrubbing
     property int abLoopStage: 0 // 0 = no points set, 1 = A set, 2 = A+B set (looping)
     readonly property bool abLoopActive: abLoopStage > 0
 
@@ -78,28 +77,19 @@ Rectangle {
             spacing: 10
 
             Text {
-                text: root.formatTime(root.scrubPosition >= 0 ? root.scrubPosition : (mpv ? mpv.position : 0))
+                text: root.formatTime(seekSlider.displayPosition)
                 font.pixelSize: 10
                 color: root.tokens.textSecondary || "#888"
                 width: 36
             }
 
-            Slider {
+            ThemedSeekBar {
                 id: seekSlider
-                focusPolicy: Qt.NoFocus
                 width: parent.width - 100
-                from: 0
-                to: Math.max(mpv ? mpv.duration : 0, 1)
-                value: root.scrubPosition >= 0 ? root.scrubPosition : (mpv ? mpv.position : 0)
-                onPressedChanged: {
-                    if (pressed) {
-                        root.scrubPosition = value;
-                    } else {
-                        playerController.seek(value);
-                        root.scrubPosition = -1;
-                    }
-                }
-                onMoved: root.scrubPosition = value
+                height: parent.height
+                mediaPosition: mpv ? mpv.position : 0
+                mediaDuration: mpv ? mpv.duration : 0
+                onSeekRequested: function(seconds) { playerController.seek(seconds); }
             }
 
             Text {

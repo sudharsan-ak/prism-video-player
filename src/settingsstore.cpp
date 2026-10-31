@@ -54,6 +54,11 @@ void SettingsStore::load()
         m_themeName = root["theme"].toString(QStringLiteral("warmGlass"));
     if (root.contains("resumeEnabled"))
         m_resumeEnabled = root["resumeEnabled"].toBool(true);
+    // Invalid or older settings files fall back to Slim (4px).
+    const QString thickness = root.value("seekBarThickness").toString(QStringLiteral("slim"));
+    if (thickness == QStringLiteral("slim") || thickness == QStringLiteral("medium")
+        || thickness == QStringLiteral("thick"))
+        m_seekBarThickness = thickness;
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
     if (root.contains("bookmarks") && root["bookmarks"].isObject())
@@ -72,6 +77,7 @@ void SettingsStore::save()
     root["volume"] = m_volume;
     root["theme"] = m_themeName;
     root["resumeEnabled"] = m_resumeEnabled;
+    root["seekBarThickness"] = m_seekBarThickness;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
 
@@ -110,6 +116,18 @@ void SettingsStore::setResumeEnabled(bool enabled)
         return;
     m_resumeEnabled = enabled;
     emit resumeEnabledChanged();
+    save();
+}
+
+void SettingsStore::setSeekBarThickness(const QString &thickness)
+{
+    if (thickness != QStringLiteral("slim") && thickness != QStringLiteral("medium")
+        && thickness != QStringLiteral("thick"))
+        return;
+    if (thickness == m_seekBarThickness)
+        return;
+    m_seekBarThickness = thickness;
+    emit seekBarThicknessChanged();
     save();
 }
 

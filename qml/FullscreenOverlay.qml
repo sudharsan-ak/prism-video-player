@@ -103,7 +103,7 @@ Item {
 
                     Text {
                         text: {
-                            const s = Math.max(0, Math.floor((mpv ? mpv.position : 0)));
+                            const s = Math.max(0, Math.floor(fullscreenSeek.displayPosition));
                             const m = Math.floor(s / 60), sec = s % 60;
                             return m + ":" + String(sec).padStart(2, "0");
                         }
@@ -111,14 +111,15 @@ Item {
                         color: "#D8D2C4"
                         width: 32
                     }
-                    Slider {
-                        focusPolicy: Qt.NoFocus
+                    ThemedSeekBar {
+                        id: fullscreenSeek
                         width: parent.width - 80
-                        from: 0
-                        to: Math.max(mpv ? mpv.duration : 0, 1)
-                        value: mpv ? mpv.position : 0
-                        onMoved: playerController.seek(value)
+                        height: parent.height
+                        mediaPosition: mpv ? mpv.position : 0
+                        mediaDuration: mpv ? mpv.duration : 0
+                        onSeekRequested: function(seconds) { playerController.seek(seconds); }
                     }
+
                     Text {
                         text: {
                             const s = Math.max(0, Math.floor((mpv ? mpv.duration : 0)));
