@@ -17,6 +17,8 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString themeName READ themeName WRITE setThemeName NOTIFY themeNameChanged)
     Q_PROPERTY(bool resumeEnabled READ resumeEnabled WRITE setResumeEnabled NOTIFY resumeEnabledChanged)
     Q_PROPERTY(QString seekBarThickness READ seekBarThickness WRITE setSeekBarThickness NOTIFY seekBarThicknessChanged)
+    Q_PROPERTY(bool keepBackupOnReplace READ keepBackupOnReplace WRITE setKeepBackupOnReplace NOTIFY keepBackupOnReplaceChanged)
+    Q_PROPERTY(QString encodingPreset READ encodingPreset WRITE setEncodingPreset NOTIFY encodingPresetChanged)
 
 public:
     explicit SettingsStore(QObject *parent = nullptr);
@@ -31,6 +33,11 @@ public:
 
     QString seekBarThickness() const { return m_seekBarThickness; }
     void setSeekBarThickness(const QString &thickness);
+
+    bool keepBackupOnReplace() const { return m_keepBackupOnReplace; }
+    void setKeepBackupOnReplace(bool enabled);
+    QString encodingPreset() const { return m_encodingPreset; }
+    void setEncodingPreset(const QString &preset);
 
     Q_INVOKABLE void bumpRecent(const QString &path);
     Q_INVOKABLE void clearRecent();
@@ -51,6 +58,8 @@ signals:
     void volumeChanged();
     void themeNameChanged();
     void seekBarThicknessChanged();
+    void keepBackupOnReplaceChanged();
+    void encodingPresetChanged();
     void resumeEnabledChanged();
 
 private:
@@ -62,6 +71,8 @@ private:
     QString m_themeName = QStringLiteral("warmGlass");
     bool m_resumeEnabled = true;
     QString m_seekBarThickness = QStringLiteral("slim");
+    bool m_keepBackupOnReplace = false;
+    QString m_encodingPreset = QStringLiteral("veryfast");
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}
 };

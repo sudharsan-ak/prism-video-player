@@ -59,6 +59,12 @@ void SettingsStore::load()
     if (thickness == QStringLiteral("slim") || thickness == QStringLiteral("medium")
         || thickness == QStringLiteral("thick"))
         m_seekBarThickness = thickness;
+    m_keepBackupOnReplace = root.value("keepBackupOnReplace").toBool(false);
+    const QString preset = root.value("encodingPreset").toString(QStringLiteral("veryfast"));
+    if (preset == QStringLiteral("ultrafast") || preset == QStringLiteral("veryfast") ||
+        preset == QStringLiteral("fast") || preset == QStringLiteral("medium") ||
+        preset == QStringLiteral("slow"))
+        m_encodingPreset = preset;
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
     if (root.contains("bookmarks") && root["bookmarks"].isObject())
@@ -78,6 +84,8 @@ void SettingsStore::save()
     root["theme"] = m_themeName;
     root["resumeEnabled"] = m_resumeEnabled;
     root["seekBarThickness"] = m_seekBarThickness;
+    root["keepBackupOnReplace"] = m_keepBackupOnReplace;
+    root["encodingPreset"] = m_encodingPreset;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
 
@@ -128,6 +136,28 @@ void SettingsStore::setSeekBarThickness(const QString &thickness)
         return;
     m_seekBarThickness = thickness;
     emit seekBarThicknessChanged();
+    save();
+}
+
+void SettingsStore::setKeepBackupOnReplace(bool enabled)
+{
+    if (m_keepBackupOnReplace == enabled)
+        return;
+    m_keepBackupOnReplace = enabled;
+    emit keepBackupOnReplaceChanged();
+    save();
+}
+
+void SettingsStore::setEncodingPreset(const QString &preset)
+{
+    if (preset != QStringLiteral("ultrafast") && preset != QStringLiteral("veryfast") &&
+        preset != QStringLiteral("fast") && preset != QStringLiteral("medium") &&
+        preset != QStringLiteral("slow"))
+        return;
+    if (m_encodingPreset == preset)
+        return;
+    m_encodingPreset = preset;
+    emit encodingPresetChanged();
     save();
 }
 

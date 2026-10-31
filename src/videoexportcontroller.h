@@ -6,6 +6,8 @@
 #include <QUrl>
 #include <QDateTime>
 
+class SettingsStore;
+
 // Runs local, non-destructive FFmpeg trim exports. Export runs asynchronously;
 // Prism's libmpv video playback and GUI thread remain independent of encoding.
 class VideoExportController : public QObject {
@@ -19,7 +21,7 @@ class VideoExportController : public QObject {
     Q_PROPERTY(QString backupPath READ backupPath NOTIFY stateChanged)
 
 public:
-    explicit VideoExportController(QObject *parent = nullptr);
+    explicit VideoExportController(SettingsStore *settings, QObject *parent = nullptr);
     bool busy() const { return m_busy; }
     double progress() const { return m_progress; }
     QString status() const { return m_status; }
@@ -30,8 +32,9 @@ public:
 
     Q_INVOKABLE QUrl suggestedOutputUrl(const QString &sourcePath) const;
     Q_INVOKABLE bool startTrim(const QString &sourcePath, double startSeconds,
-                              double endSeconds, const QUrl &destination);
-    Q_INVOKABLE bool startReplaceTrim(const QString &sourcePath, double startSeconds, double endSeconds);
+                              double endSeconds, const QUrl &destination, double playbackSpeed = 1.0);
+    Q_INVOKABLE bool startReplaceTrim(const QString &sourcePath, double startSeconds, double endSeconds,
+                                       double playbackSpeed = 1.0);
     Q_INVOKABLE void completeReplacement();
     Q_INVOKABLE void cancel();
 
@@ -47,11 +50,14 @@ private:
     void parseProgress(const QByteArray &chunk);
     void finished(int exitCode, QProcess::ExitStatus exitStatus);
     bool beginTrim(const QString &sourcePath, double startSeconds, double endSeconds,
-                   const QUrl &destination, bool replaceOriginal);
+                   const QUrl &destination, bool replaceOriginal, double playbackSpeed);
     void finalizeReplacement(int attempt);
     void saveFallbackCopy(const QString &reason);
     void markCompleted(const QString &outputPath, bool replaced);
 
+    SettingsStore *m_settings = nullptr;
+    double m_playbackSpeed = 1.0;
+    bool m_keepBackupForJob = false;
     QProcess m_process;
     bool m_busy = false;
     bool m_cancelRequested = false;

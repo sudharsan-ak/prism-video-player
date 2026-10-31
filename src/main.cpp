@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
     SettingsStore settings;
     ThemeController themeController(&settings);
     PlayerController playerController(&settings);
-    VideoExportController videoExportController;
+    VideoExportController videoExportController(&settings);
     VideoThumbnailController videoThumbnailController;
 
     QQmlApplicationEngine engine;

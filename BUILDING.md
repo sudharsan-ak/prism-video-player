@@ -71,8 +71,9 @@ Prism first looks for `ffmpeg.exe` beside the running `Prism.exe`, then on
 **Phase 1 export limitations:** creates a new H.264/AAC MP4, re-encodes
 for accurate trim points, keeps the first audio track (if present),
 does not preserve embedded/external subtitles or additional audio tracks,
-and does not yet crop or rotate output. The original source is never
-overwritten; failed/canceled exports clean up their temporary file.
+and does not yet crop or rotate output. Export Copy never modifies the
+source; Replace Original requires confirmation and encodes before swapping
+the file. Failed/canceled copy exports clean up their temporary file.
 Only the final successfully encoded file gets its selected name.
 
 **License note:** FFmpeg builds differ in LGPL/GPL licensing based on
@@ -84,18 +85,45 @@ FFmpeg to others. The application repo does not redistribute it.
 In Edit mode, select **Replace original MP4...** (available only for MP4
 sources) and confirm the warning. Prism first finishes the entire encoding
 job into a temporary file. After libmpv releases the source file, Windows
-\`ReplaceFileW\` replaces it with the edited MP4 and keeps a complete,
-timestamped backup named
-\`<title>-prism-backup-<timestamp>-<id>.mp4\` in the original folder.
+\`ReplaceFileW\` replaces it with the edited MP4. A timestamped backup
+named \`<title>-prism-backup-<timestamp>-<id>.mp4\` is kept only when
+**Tools → Settings → Keep backup when replacing original** is enabled
+(default OFF).
 
 - **Export edited copy remains the default and safest choice.** Prism never
   silently overwrites media, and existing copy output names are rejected.
 - The new MP4 keeps the first audio stream; **other audio streams and
-  subtitles are not preserved**. The backup preserves the full original.
+  subtitles are not preserved**. When enabled, the backup preserves the
+  complete original file.
 - If the original changes while encoding or Windows refuses the file
   replacement, Prism attempts to save the completed video as a new
-  \`-trimmed.mp4\` copy, leaving the original untouched.
+  \`-trimmed.mp4\` copy. Some Windows replace errors may partially
+  affect the source or backup, so inspect both if replacement fails.
 - If the fallback copy cannot be saved either, Prism reports where the
   encoded temporary file remains rather than deleting successful work.
 - Test Replace Original on disposable MP4 files before using valuable
-  videos. Inspect the edited copy and keep the backup until satisfied.
+  videos. When backup is enabled, inspect the edited copy before deleting
+  its backup. If backup is disabled, replacement may be irreversible.
+
+## Trim playback, encoder presets and performance
+
+- Edit mode has **Play range / Pause** and **0.25x–2x speed** controls.
+  Editing speed adjusts mpv playback and export video/audio timestamps
+  (FFmpeg `setpts` / `atempo`) together. Normal speed is restored
+  on leaving Edit mode. New editing sessions default to 1x.
+- Encoding presets in the editing sidebar: Ultrafast, Very Fast, Fast,
+  Medium, Slow. Default is **Very Fast** and persists across restarts.
+  These presets affect encoding speed and compression efficiency, not
+  playback speed. CRF remains 18.
+- Tools → Settings → **Keep backup when replacing original** is OFF by
+  default and persists in settings.json. ON retains a timestamped backup.
+  OFF requests a Windows replacement without backup; some file-system
+  errors may be unrecoverable. Always validate using disposable files.
+- Thumbnail extraction uses two bounded concurrent FFmpeg jobs and reuses
+  frames when reopening an unchanged file within the same Prism session.
+- Sub-10-second clips show fractional timestamps in the normal seek bar
+  and fullscreen overlay, improving sub-second trim review.
+
+**Acceptance testing:** Validate 0.25x, 0.5x, 1x, 2x exported durations
+and audio sync; test each encoding preset, the backup toggle ON/OFF,
+cancel and failed replacement, thumbnail reuse and all six themes.

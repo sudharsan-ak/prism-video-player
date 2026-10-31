@@ -1,4 +1,5 @@
 #include "videoexportcontroller.h"
+#include "settingsstore.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -26,7 +27,8 @@ bool isLocalAbsolutePath(const QString &path)
 }
 }
 
-VideoExportController::VideoExportController(QObject *parent) : QObject(parent)
+VideoExportController::VideoExportController(SettingsStore *settings, QObject *parent)
+    : QObject(parent), m_settings(settings)
 {
     connect(&m_process, &QProcess::readyReadStandardOutput, this, [this] {
         parseProgress(m_process.readAllStandardOutput());
@@ -67,21 +69,23 @@ QUrl VideoExportController::suggestedOutputUrl(const QString &sourcePath) const
 }
 
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
-                                      double endSeconds, const QUrl &destination)
+                                      double endSeconds, const QUrl &destination,
+                                      double playbackSpeed)
 {
-    return beginTrim(sourcePath, startSeconds, endSeconds, destination, false);
+    return beginTrim(sourcePath, startSeconds, endSeconds, destination, false, playbackSpeed);
 }
 
 bool VideoExportController::startReplaceTrim(const QString &sourcePath,
-                                            double startSeconds, double endSeconds)
+                                            double startSeconds, double endSeconds,
+                                            double playbackSpeed)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds,
-                     QUrl::fromLocalFile(sourcePath), true);
+                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed);
 }
 
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
-                                      bool replaceOriginal)
+                                      bool replaceOriginal, double playbackSpeed)
 {
     if (m_busy)
         return false;
@@ -102,6 +106,10 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         !destination.isLocalFile() || !isLocalAbsolutePath(outputPath) ||
         output.suffix().compare(QStringLiteral("mp4"), Qt::CaseInsensitive) != 0) {
         fail(QStringLiteral("Choose an existing local video and a local .mp4 destination."));
+        return false;
+    }
+    if (!std::isfinite(playbackSpeed) || playbackSpeed < 0.25 || playbackSpeed > 2.0) {
+        fail(QStringLiteral("Select a playback speed from 0.25x to 2.0x."));
         return false;
     }
     if (!std::isfinite(startSeconds) || !std::isfinite(endSeconds) ||
@@ -141,9 +149,12 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     m_sourceSize = source.size();
     m_sourceModified = source.lastModified();
     m_replaceOriginal = replaceOriginal;
+    m_playbackSpeed = playbackSpeed;
+    m_keepBackupForJob = m_settings && m_settings->keepBackupOnReplace();
     m_temporaryOutput = QDir(output.absolutePath()).filePath(
         QStringLiteral(".prism-export-%1.mp4").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
-    m_clipDuration = endSeconds - startSeconds;
+    const double sourceDuration = endSeconds - startSeconds;
+    m_clipDuration = sourceDuration / playbackSpeed;
     m_progress = 0.0;
     m_progressBuffer.clear();
     m_lastStderr.clear();
@@ -155,8 +166,14 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     emit progressChanged();
     emit stateChanged();
 
-    // Always re-encode for accurate cuts at non-keyframes. First audio
-    // track only, no subtitles in the Phase 1 trim-export implementation.
+    // Accurate cuts and speed changes require re-encoding. Video PTS and
+    // audio tempo are adjusted together to keep A/V in sync. atempo
+    // supports 0.5..2.0 directly, so chain two 0.5 filters for 0.25x.
+    const QString speed = QString::number(playbackSpeed, 'f', 3);
+    const QString videoFilter = QStringLiteral("setpts=(PTS-STARTPTS)/") + speed;
+    const QString audioFilter = playbackSpeed < 0.5
+        ? QStringLiteral("atempo=0.5,atempo=") + QString::number(playbackSpeed / 0.5, 'f', 3)
+        : QStringLiteral("atempo=") + speed;
     // FFmpeg receives separate argv elements, never a shell command.
     const QStringList args = {
         QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"),
@@ -164,14 +181,16 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral("-stats_period"), QStringLiteral("0.25"),
         QStringLiteral("-progress"), QStringLiteral("pipe:1"),
         QStringLiteral("-n"), QStringLiteral("-ss"), QString::number(startSeconds, 'f', 3),
+        QStringLiteral("-t"), QString::number(sourceDuration, 'f', 3),
         QStringLiteral("-protocol_whitelist"), QStringLiteral("file,crypto,data"),
         QStringLiteral("-i"), source.absoluteFilePath(),
-        QStringLiteral("-t"), QString::number(m_clipDuration, 'f', 3),
         QStringLiteral("-map"), QStringLiteral("0:V:0"),
         QStringLiteral("-map"), QStringLiteral("0:a:0?"),
         QStringLiteral("-c:v"), QStringLiteral("libx264"),
-        QStringLiteral("-preset"), QStringLiteral("fast"),
+        QStringLiteral("-preset"), m_settings ? m_settings->encodingPreset() : QStringLiteral("veryfast"),
         QStringLiteral("-crf"), QStringLiteral("18"),
+        QStringLiteral("-vf"), videoFilter,
+        QStringLiteral("-af"), audioFilter,
         QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
         QStringLiteral("-c:a"), QStringLiteral("aac"),
         QStringLiteral("-b:a"), QStringLiteral("192k"),
@@ -256,7 +275,8 @@ void VideoExportController::markCompleted(const QString &outputPath, bool replac
     m_busy = false;
     m_replacePending = false;
     m_status = replaced
-        ? QStringLiteral("Original replaced. A backup was kept beside it.")
+        ? (m_keepBackupForJob ? QStringLiteral("Original replaced. Backup saved.")
+                              : QStringLiteral("Original replaced. No backup requested."))
         : QStringLiteral("Edited MP4 saved.");
     m_error.clear();
     m_temporaryOutput.clear();
@@ -284,18 +304,18 @@ void VideoExportController::finalizeReplacement(int attempt)
         return;
     }
 #ifdef Q_OS_WIN
-    if (m_backupPath.isEmpty()) {
+    if (m_keepBackupForJob && m_backupPath.isEmpty()) {
         const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
         const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
         m_backupPath = QDir(source.absolutePath()).filePath(
             source.completeBaseName() + QStringLiteral("-prism-backup-") + stamp
             + QStringLiteral("-") + id + QStringLiteral(".mp4"));
     }
-    // Windows-native replace keeps a full backup in the source folder.
+    // Atomically replace when possible. Optional backup remains explicit.
     const BOOL ok = ReplaceFileW(
         reinterpret_cast<LPCWSTR>(m_pendingSource.utf16()),
         reinterpret_cast<LPCWSTR>(m_temporaryOutput.utf16()),
-        reinterpret_cast<LPCWSTR>(m_backupPath.utf16()),
+        m_keepBackupForJob ? reinterpret_cast<LPCWSTR>(m_backupPath.utf16()) : nullptr,
         REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr);
     if (ok) {
         markCompleted(m_pendingSource, true);

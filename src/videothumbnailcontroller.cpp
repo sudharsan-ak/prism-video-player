@@ -12,6 +12,7 @@
 
 namespace {
 constexpr int ThumbnailCount = 16;
+constexpr int MaxConcurrentJobs = 2;
 }
 
 VideoThumbnailController::VideoThumbnailController(QObject *parent) : QObject(parent) {}
@@ -27,12 +28,12 @@ QString VideoThumbnailController::ffmpegExecutable() const
 void VideoThumbnailController::stop()
 {
     ++m_generation;
-    if (m_process) {
-        m_process->disconnect(this);
-        m_process->kill();
-        m_process->deleteLater();
-        m_process = nullptr;
+    for (QProcess *p : m_processes) {
+        p->disconnect(this);
+        p->kill();
+        p->deleteLater();
     }
+    m_processes.clear();
     m_generating = false;
     m_index = 0;
     m_source.clear();
@@ -65,11 +66,23 @@ void VideoThumbnailController::generate(const QString &source, double duration)
         emit stateChanged();
         return;
     }
+    const QString resolvedPath = info.canonicalFilePath();
+    const bool reuse = m_cachedSource == resolvedPath &&
+                       m_cachedSize == info.size() &&
+                       m_cachedModified == info.lastModified() &&
+                       m_cachedFrames.size() == ThumbnailCount;
+    if (!reuse) {
+        m_cachedSource = resolvedPath;
+        m_cachedSize = info.size();
+        m_cachedModified = info.lastModified();
+        m_cachedFrames = QStringList();
+        for (int i = 0; i < ThumbnailCount; ++i)
+            m_cachedFrames.append(QString());
+    }
+    m_frames = m_cachedFrames;
     m_source = info.absoluteFilePath();
     m_duration = duration;
-    m_frames = QStringList();
-    for (int i = 0; i < ThumbnailCount; ++i)
-        m_frames.append(QString());
+    m_index = 0;
     m_generating = true;
     emit framesChanged();
     emit stateChanged();
@@ -78,64 +91,65 @@ void VideoThumbnailController::generate(const QString &source, double duration)
 
 void VideoThumbnailController::launchNext()
 {
-    if (!m_generating || m_process)
+    if (!m_generating)
         return;
-    if (m_index >= ThumbnailCount) {
+    while (m_processes.size() < MaxConcurrentJobs && m_index < ThumbnailCount) {
+        const int index = m_index++;
+        if (!m_frames[index].isEmpty())
+            continue; // Already cached for this unchanged local file.
+        const quint64 job = m_generation;
+        const QString target = m_cache.filePath(
+            QStringLiteral("thumb-%1-%2.jpg").arg(job).arg(index));
+        const double timestamp = qMax(0.0, qMin(m_duration - 0.001,
+            (index + 0.5) * m_duration / ThumbnailCount));
+
+        QProcess *proc = new QProcess(this);
+        m_processes.append(proc);
+        connect(proc, &QProcess::finished, this,
+                [this, proc, index, job, target](int exitCode, QProcess::ExitStatus status) {
+            if (job != m_generation)
+                return;
+            m_processes.removeAll(proc);
+            proc->deleteLater();
+            if (status == QProcess::NormalExit && exitCode == 0 &&
+                QFileInfo(target).isFile() && QFileInfo(target).size() > 0) {
+                const QString url = QUrl::fromLocalFile(target).toString();
+                m_frames[index] = url;
+                m_cachedFrames[index] = url;
+                emit framesChanged();
+            }
+            launchNext();
+        });
+        connect(proc, &QProcess::errorOccurred, this,
+                [this, proc, job](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart && job == m_generation) {
+                m_processes.removeAll(proc);
+                proc->deleteLater();
+                m_error = QStringLiteral("FFmpeg could not start for thumbnail extraction.");
+                m_generating = false;
+                emit stateChanged();
+            }
+        });
+        QTimer::singleShot(10000, proc, [proc] {
+            if (proc->state() != QProcess::NotRunning)
+                proc->kill();
+        });
+        proc->start(m_program, {
+            QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"),
+            QStringLiteral("-loglevel"), QStringLiteral("error"),
+            QStringLiteral("-ss"), QString::number(timestamp, 'f', 3),
+            QStringLiteral("-protocol_whitelist"), QStringLiteral("file,crypto,data"),
+            QStringLiteral("-i"), m_source,
+            QStringLiteral("-map"), QStringLiteral("0:V:0"),
+            QStringLiteral("-frames:v"), QStringLiteral("1"),
+            QStringLiteral("-vf"),
+            QStringLiteral("scale=160:90:force_original_aspect_ratio=increase,crop=160:90"),
+            QStringLiteral("-q:v"), QStringLiteral("5"),
+            QStringLiteral("-y"), target
+        });
+    }
+    if (m_processes.isEmpty() && m_index >= ThumbnailCount) {
         m_generating = false;
         emit stateChanged();
-        return;
     }
-    const int index = m_index++;
-    const quint64 job = m_generation;
-    const QString target = m_cache.filePath(QStringLiteral("thumb-%1-%2.jpg").arg(job).arg(index));
-    // Sample the middle of each time slice. Accurate-enough seeking before
-    // -i keeps thumbnail generation fast even for long videos.
-    const double timestamp = qMax(0.0, qMin(m_duration - 0.001,
-        (index + 0.5) * m_duration / ThumbnailCount));
-
-    QProcess *proc = new QProcess(this);
-    m_process = proc;
-    connect(proc, &QProcess::finished, this,
-            [this, proc, index, job, target](int exitCode, QProcess::ExitStatus status) {
-        if (job != m_generation || proc != m_process)
-            return;
-        m_process = nullptr;
-        proc->deleteLater();
-        if (status == QProcess::NormalExit && exitCode == 0 &&
-            QFileInfo(target).isFile() && QFileInfo(target).size() > 0) {
-            m_frames[index] = QUrl::fromLocalFile(target).toString();
-            emit framesChanged();
-        }
-        // Continue even if one frame cannot be decoded.
-        QMetaObject::invokeMethod(this, [this] { launchNext(); }, Qt::QueuedConnection);
-    });
-    connect(proc, &QProcess::errorOccurred, this,
-            [this, proc, job](QProcess::ProcessError e) {
-        if (e == QProcess::FailedToStart && job == m_generation && proc == m_process) {
-            m_error = QStringLiteral("FFmpeg could not start to generate thumbnails.");
-            m_generating = false;
-            m_process = nullptr;
-            proc->deleteLater();
-            emit stateChanged();
-        }
-    });
-    // Bound individual extraction time so corrupt media cannot hang the UI.
-    QTimer::singleShot(10000, proc, [proc] {
-        if (proc->state() != QProcess::NotRunning)
-            proc->kill();
-    });
-
-    proc->start(m_program, {
-        QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"),
-        QStringLiteral("-loglevel"), QStringLiteral("error"),
-        QStringLiteral("-ss"), QString::number(timestamp, 'f', 3),
-        QStringLiteral("-protocol_whitelist"), QStringLiteral("file,crypto,data"),
-        QStringLiteral("-i"), m_source,
-        QStringLiteral("-map"), QStringLiteral("0:V:0"),
-        QStringLiteral("-frames:v"), QStringLiteral("1"),
-        QStringLiteral("-vf"),
-        QStringLiteral("scale=160:90:force_original_aspect_ratio=increase,crop=160:90"),
-        QStringLiteral("-q:v"), QStringLiteral("4"),
-        QStringLiteral("-y"), target
-    });
 }

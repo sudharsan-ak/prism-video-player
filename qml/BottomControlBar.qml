@@ -18,12 +18,17 @@ Rectangle {
     readonly property bool abLoopActive: abLoopStage > 0
 
     function formatTime(seconds) {
-        seconds = Math.max(0, Math.floor(seconds || 0));
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = seconds % 60;
+        const exact = Math.max(0, seconds || 0);
+        const whole = Math.floor(exact);
+        const h = Math.floor(whole / 3600);
+        const m = Math.floor((whole % 3600) / 60);
+        const s = whole % 60;
         const pad = n => String(n).padStart(2, "0");
-        return h > 0 ? (h + ":" + pad(m) + ":" + pad(s)) : (m + ":" + pad(s));
+        const base = h > 0 ? (h + ":" + pad(m) + ":" + pad(s)) : (m + ":" + pad(s));
+        const duration = root.mpv ? root.mpv.duration : 0;
+        return duration > 0 && duration < 10
+            ? base + "." + pad(Math.floor((exact - whole) * 100 + 0.001))
+            : base;
     }
 
     // Every transport/utility icon shares this size and baseline so
@@ -80,12 +85,12 @@ Rectangle {
                 text: root.formatTime(seekSlider.displayPosition)
                 font.pixelSize: 10
                 color: root.tokens.textSecondary || "#888"
-                width: 36
+                width: mpv && mpv.duration > 0 && mpv.duration < 10 ? 60 : 36
             }
 
             ThemedSeekBar {
                 id: seekSlider
-                width: parent.width - 100
+                width: parent.width - ((mpv && mpv.duration > 0 && mpv.duration < 10) ? 148 : 100)
                 height: parent.height
                 mediaPosition: mpv ? mpv.position : 0
                 mediaDuration: mpv ? mpv.duration : 0
@@ -96,7 +101,7 @@ Rectangle {
                 text: root.formatTime(mpv ? mpv.duration : 0)
                 font.pixelSize: 10
                 color: root.tokens.textSecondary || "#888"
-                width: 36
+                width: mpv && mpv.duration > 0 && mpv.duration < 10 ? 60 : 36
             }
         }
 

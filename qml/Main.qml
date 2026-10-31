@@ -28,6 +28,28 @@ ApplicationWindow {
     property real editStart: 0
     property real editEnd: 0
     property bool previewSelectionPlaying: false
+    property real editSpeed: 1.0
+    property real normalPlaybackSpeed: 1.0
+
+    function stopRangePreview() {
+        previewSelectionPlaying = false;
+        playerController.setPaused(true);
+    }
+
+    function toggleEditPlayback() {
+        if (!editMode || editEnd - editStart < 0.1)
+            return;
+        if (previewSelectionPlaying && videoSurface.mpv && !videoSurface.mpv.paused) {
+            stopRangePreview();
+            return;
+        }
+        const mpv = videoSurface.mpv;
+        if (!mpv || mpv.position < editStart || mpv.position >= editEnd - 0.05)
+            playerController.seek(editStart);
+        playerController.setSpeed(editSpeed);
+        previewSelectionPlaying = true;
+        playerController.setPaused(false);
+    }
 
     function beginEditing() {
         const mpv = videoSurface.mpv;
@@ -41,6 +63,9 @@ ApplicationWindow {
         }
         if (fullscreenMode)
             toggleFullscreen();
+        normalPlaybackSpeed = mpv.speed;
+        editSpeed = 1.0;
+        playerController.setSpeed(1.0);
         editSourcePath = mpv.mediaPath;
         editStart = 0;
         editEnd = mpv.duration;
@@ -59,17 +84,15 @@ ApplicationWindow {
             return;
         }
         previewSelectionPlaying = false;
+        playerController.setPaused(true);
+        playerController.setSpeed(normalPlaybackSpeed);
         editMode = false;
         videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
     }
 
     function previewEditRange() {
-        if (!editMode || editEnd <= editStart)
-            return;
-        previewSelectionPlaying = true;
-        playerController.seek(editStart);
-        playerController.setPaused(false);
+        toggleEditPlayback();
     }
 
     function openTrimSaveDialog() {
@@ -215,21 +238,29 @@ ApplicationWindow {
                     position: videoSurface.mpv ? videoSurface.mpv.position : 0
                     startTime: prismWindow.editStart
                     endTime: prismWindow.editEnd
+                    editSpeed: prismWindow.editSpeed
+                    previewPlaying: prismWindow.previewSelectionPlaying &&
+                        videoSurface.mpv && !videoSurface.mpv.paused
+                    onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
+                    onSpeedEdited: function(value) {
+                        prismWindow.editSpeed = value;
+                        playerController.setSpeed(value);
+                    }
                     onStartTimeEdited: function(seconds) {
-                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.stopRangePreview();
                         prismWindow.editStart = Math.max(0, Math.min(seconds, prismWindow.editEnd - 0.1));
                     }
                     onEndTimeEdited: function(seconds) {
-                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.stopRangePreview();
                         prismWindow.editEnd = Math.min(duration, Math.max(seconds, prismWindow.editStart + 0.1));
                     }
                     onSeekRequested: function(seconds) {
-                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.stopRangePreview();
                         playerController.seek(seconds);
                     }
                     onPreviewRequested: prismWindow.previewEditRange()
                     onResetRequested: {
-                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.stopRangePreview();
                         prismWindow.editStart = 0;
                         prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
                     }
@@ -255,6 +286,7 @@ ApplicationWindow {
                 startTime: prismWindow.editStart
                 endTime: prismWindow.editEnd
                 duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
+                editSpeed: prismWindow.editSpeed
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.openTrimSaveDialog()
                 onReplaceRequested: replaceConfirmDialog.open()
@@ -466,9 +498,11 @@ ApplicationWindow {
         standardButtons: Dialog.Ok | Dialog.Cancel
         closePolicy: Popup.CloseOnEscape
         onAccepted: {
+            prismWindow.stopRangePreview();
             videoExportController.startReplaceTrim(prismWindow.editSourcePath,
                                                    prismWindow.editStart,
-                                                   prismWindow.editEnd);
+                                                   prismWindow.editEnd,
+                                                   prismWindow.editSpeed);
         }
         background: Rectangle {
             radius: 12
@@ -482,7 +516,9 @@ ApplicationWindow {
             color: prismWindow.tokens.textPrimary || "#fff"
             font.pixelSize: 12
             text: "Prism will encode the trimmed clip first and then replace the source MP4. "
-                + "A timestamped backup of the original will remain in the same folder.\n\n"
+                + (settingsStore.keepBackupOnReplace
+                    ? "A timestamped backup will be kept beside it.\n\n"
+                    : "No backup will be kept. This cannot be undone.\n\n")
                 + "The trimmed MP4 will include only the first audio track. "
                 + "Other audio tracks and subtitles will NOT be preserved.\n\n"
                 + "Choose Export edited copy instead if you want to keep the original untouched."
@@ -496,10 +532,11 @@ ApplicationWindow {
         defaultSuffix: "mp4"
         nameFilters: ["MP4 video (*.mp4)"]
         onAccepted: {
+            prismWindow.stopRangePreview();
             videoExportController.startTrim(prismWindow.editSourcePath,
                                              prismWindow.editStart,
                                              prismWindow.editEnd,
-                                             selectedFile);
+                                             selectedFile, prismWindow.editSpeed);
         }
     }
 
@@ -507,6 +544,8 @@ ApplicationWindow {
         target: videoExportController
         function onReplacementPrepared() {
             prismWindow.previewSelectionPlaying = false;
+            playerController.setPaused(true);
+            playerController.setSpeed(prismWindow.normalPlaybackSpeed);
             prismWindow.editMode = false;
             videoThumbnailController.stop();
             // Release the source handle before Windows can replace it.
@@ -517,7 +556,9 @@ ApplicationWindow {
             if (videoExportController.lastWasReplacement) {
                 settingsStore.clearResumePositionFor(prismWindow.editSourcePath);
                 playerController.openFiles([prismWindow.editSourcePath]);
-                toast.show("Original replaced. Backup saved beside it.", false);
+                toast.show(videoExportController.backupPath.length > 0
+                           ? "Original replaced. Backup saved beside it."
+                           : "Original replaced successfully.", false);
             } else if (videoExportController.error.length > 0) {
                 toast.show("Replacement not confirmed. Edited copy saved. Inspect original.", true);
             } else {
@@ -552,6 +593,7 @@ ApplicationWindow {
             if (prismWindow.editMode &&
                 videoSurface.mpv.mediaPath !== prismWindow.editSourcePath) {
                 prismWindow.previewSelectionPlaying = false;
+                playerController.setSpeed(prismWindow.normalPlaybackSpeed);
                 prismWindow.editMode = false;
                 videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);
@@ -569,7 +611,10 @@ ApplicationWindow {
 
         switch (event.key) {
         case Qt.Key_Space:
-            playerController.togglePause();
+            if (prismWindow.editMode)
+                prismWindow.toggleEditPlayback();
+            else
+                playerController.togglePause();
             event.accepted = true;
             break;
         case Qt.Key_Left:

@@ -17,11 +17,15 @@ Rectangle {
     property real position: 0
     property real startTime: 0
     property real endTime: 0
+    property real editSpeed: 1.0
+    property bool previewPlaying: false
 
     signal startTimeEdited(real seconds)
     signal endTimeEdited(real seconds)
     signal seekRequested(real seconds)
     signal previewRequested()
+    signal togglePlaybackRequested()
+    signal speedEdited(real speed)
     signal resetRequested()
     signal exportRequested()
 
@@ -30,7 +34,10 @@ Rectangle {
         const h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60);
         const s = whole % 60;
         const pad = n => String(n).padStart(2, "0");
-        return h ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
+        const base = h ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
+        return root.duration < 10
+            ? base + "." + pad(Math.floor((seconds - Math.floor(seconds)) * 100 + 0.001))
+            : base;
     }
 
     ColumnLayout {
@@ -151,6 +158,7 @@ Rectangle {
 
             RangeSlider {
                 id: trimRange
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
                 anchors.fill: parent
                 from: 0
                 to: Math.max(root.duration, 1)
@@ -170,6 +178,7 @@ Rectangle {
                 }
                 background: Item {}
                 first.handle: Rectangle {
+                    HoverHandler { cursorShape: Qt.SizeHorCursor }
                     width: 14; height: 46; radius: 4
                     x: trimRange.leftPadding + trimRange.first.visualPosition * (trimRange.availableWidth - width)
                     y: (trimRange.height - height) / 2
@@ -184,6 +193,7 @@ Rectangle {
                     }
                 }
                 second.handle: Rectangle {
+                    HoverHandler { cursorShape: Qt.SizeHorCursor }
                     width: 14; height: 46; radius: 4
                     x: trimRange.leftPadding + trimRange.second.visualPosition * (trimRange.availableWidth - width)
                     y: (trimRange.height - height) / 2
@@ -254,16 +264,35 @@ Rectangle {
             }
 
             TrimButton {
+                text: root.previewPlaying ? "❚❚ Pause" : "▶ Play range"
+                onClicked: root.togglePlaybackRequested()
+            }
+            TrimButton {
+                id: speedButton
+                text: root.editSpeed + "x ▾"
+                onClicked: speedMenu.open()
+                Menu {
+                    id: speedMenu
+                    parent: speedButton
+                    y: speedButton.height
+                    Repeater {
+                        model: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                        MenuItem {
+                            text: modelData + "x"
+                            checkable: true
+                            checked: root.editSpeed === modelData
+                            onTriggered: root.speedEdited(modelData)
+                        }
+                    }
+                }
+            }
+            TrimButton {
                 text: "Set IN"
                 onClicked: root.startTimeEdited(Math.max(0, Math.min(root.position, root.endTime - 0.1)))
             }
             TrimButton {
                 text: "Set OUT"
                 onClicked: root.endTimeEdited(Math.min(root.duration, Math.max(root.position, root.startTime + 0.1)))
-            }
-            TrimButton {
-                text: "Preview selection"
-                onClicked: root.previewRequested()
             }
             TrimButton {
                 text: "Reset range"

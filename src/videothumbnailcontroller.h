@@ -1,20 +1,20 @@
 #pragma once
 
 #include <QObject>
-#include <QPointer>
+#include <QDateTime>
 #include <QProcess>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QList>
 
-// Asynchronously extracts actual frames from the local video with FFmpeg.
-// Uses an independent process; mpv playback and seeking are unaffected.
-// Temporary JPEGs are cleaned when Prism exits.
+// Extract real video frames without disturbing mpv playback. Two
+// concurrent FFmpeg jobs keep the UI responsive. Last source is cached
+// in the private temporary directory until Prism exits.
 class VideoThumbnailController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QStringList frames READ frames NOTIFY framesChanged)
     Q_PROPERTY(bool generating READ generating NOTIFY stateChanged)
     Q_PROPERTY(QString error READ error NOTIFY stateChanged)
-
 public:
     explicit VideoThumbnailController(QObject *parent = nullptr);
     QStringList frames() const { return m_frames; }
@@ -23,18 +23,20 @@ public:
 
     Q_INVOKABLE void generate(const QString &source, double duration);
     Q_INVOKABLE void stop();
-
 signals:
     void framesChanged();
     void stateChanged();
-
 private:
     QString ffmpegExecutable() const;
     void launchNext();
 
     QTemporaryDir m_cache;
-    QPointer<QProcess> m_process;
+    QList<QProcess *> m_processes;
     QStringList m_frames;
+    QStringList m_cachedFrames;
+    QString m_cachedSource;
+    qint64 m_cachedSize = -1;
+    QDateTime m_cachedModified;
     QString m_source;
     QString m_program;
     QString m_error;

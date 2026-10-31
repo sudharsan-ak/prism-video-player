@@ -18,6 +18,12 @@ Rectangle {
     property real startTime: 0
     property real endTime: 0
     property real duration: 0
+    property real editSpeed: 1.0
+    readonly property var presetIds: ["ultrafast", "veryfast", "fast", "medium", "slow"]
+    function presetLabel(id) {
+        const names = ["Ultrafast", "Very Fast", "Fast", "Medium", "Slow"];
+        return names[Math.max(0, presetIds.indexOf(id))];
+    }
 
     signal closeRequested()
     signal exportRequested()
@@ -31,7 +37,10 @@ Rectangle {
         let m = Math.floor((s % 3600) / 60);
         let sec = s % 60;
         const pad = n => String(n).padStart(2, "0");
-        return h ? h + ":" + pad(m) + ":" + pad(sec) : m + ":" + pad(sec);
+        const base = h ? h + ":" + pad(m) + ":" + pad(sec) : m + ":" + pad(sec);
+        return seconds >= 0 && seconds < 10
+            ? base + "." + pad(Math.floor((seconds - Math.floor(seconds)) * 100 + 0.001))
+            : base;
     }
 
     ScrollView {
@@ -164,8 +173,65 @@ Rectangle {
                 Layout.rightMargin: 16
                 color: root.tokens.textSecondary || "#aaa"
                 font.pixelSize: 11
-                text: "Output: MP4 (H.264 + AAC)\nOriginal untouched\nFirst audio track only\nSubtitles not included"
+                text: "Output: MP4 (H.264 + AAC)\n"
+                    + "Edited duration: " + root.timeText((root.endTime - root.startTime)
+                        / Math.max(0.25, root.editSpeed)) + "\n"
+                    + "Copy or replace original\nFirst audio track only\nSubtitles not included"
                 lineHeight: 1.45
+                wrapMode: Text.WordWrap
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: "ENCODING PRESET"
+                font.pixelSize: 10
+                font.bold: true
+                color: root.tokens.textMuted || "#999"
+            }
+            Button {
+                id: presetButton
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                enabled: !videoExportController.busy
+                text: root.presetLabel(settingsStore.encodingPreset) + " ▾"
+                onClicked: presetMenu.open()
+                background: Rectangle {
+                    color: root.tokens.panelGlassStrong || "#242331"
+                    radius: 8
+                    border.color: root.tokens.panelBorder || "#444"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textPrimary || "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Menu {
+                    id: presetMenu
+                    parent: presetButton
+                    y: presetButton.height
+                    Repeater {
+                        model: root.presetIds
+                        MenuItem {
+                            text: root.presetLabel(modelData)
+                            checkable: true
+                            checked: settingsStore.encodingPreset === modelData
+                            onTriggered: settingsStore.encodingPreset = modelData
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: "Very Fast is recommended. Slower presets may produce smaller files."
+                color: root.tokens.textMuted || "#888"
+                font.pixelSize: 10
                 wrapMode: Text.WordWrap
             }
 
@@ -221,7 +287,9 @@ Rectangle {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
                 text: root.canReplace
-                    ? "Replacement preserves the original in a timestamped backup."
+                    ? (settingsStore.keepBackupOnReplace
+                        ? "Backup enabled. A timestamped original will be kept."
+                        : "Backup OFF. Change this in Tools → Settings.")
                     : "Replacing the original is supported only for MP4 sources."
                 color: root.tokens.textMuted || "#888"
                 font.pixelSize: 10
