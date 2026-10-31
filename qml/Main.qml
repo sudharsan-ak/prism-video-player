@@ -251,11 +251,13 @@ ApplicationWindow {
                 Layout.preferredWidth: 288
                 visible: prismWindow.editMode
                 sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
+                sourcePath: prismWindow.editSourcePath
                 startTime: prismWindow.editStart
                 endTime: prismWindow.editEnd
                 duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.openTrimSaveDialog()
+                onReplaceRequested: replaceConfirmDialog.open()
                 onPreviewRequested: prismWindow.previewEditRange()
                 onResetRequested: {
                     prismWindow.editStart = 0;
@@ -454,6 +456,39 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: replaceConfirmDialog
+        modal: true
+        width: 450
+        anchors.centerIn: parent
+        padding: 18
+        title: "Replace original MP4?"
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        closePolicy: Popup.CloseOnEscape
+        onAccepted: {
+            videoExportController.startReplaceTrim(prismWindow.editSourcePath,
+                                                   prismWindow.editStart,
+                                                   prismWindow.editEnd);
+        }
+        background: Rectangle {
+            radius: 12
+            color: prismWindow.tokens.panelGlassStrong || "#242331"
+            border.color: prismWindow.tokens.accentSolid || "#A89BFF"
+            border.width: 1
+        }
+        contentItem: Text {
+            width: 400
+            wrapMode: Text.WordWrap
+            color: prismWindow.tokens.textPrimary || "#fff"
+            font.pixelSize: 12
+            text: "Prism will encode the trimmed clip first and then replace the source MP4. "
+                + "A timestamped backup of the original will remain in the same folder.\n\n"
+                + "The trimmed MP4 will include only the first audio track. "
+                + "Other audio tracks and subtitles will NOT be preserved.\n\n"
+                + "Choose Export edited copy instead if you want to keep the original untouched."
+        }
+    }
+
     FileDialog {
         id: trimSaveDialog
         title: "Export trimmed video (new MP4)"
@@ -470,8 +505,24 @@ ApplicationWindow {
 
     Connections {
         target: videoExportController
+        function onReplacementPrepared() {
+            prismWindow.previewSelectionPlaying = false;
+            prismWindow.editMode = false;
+            videoThumbnailController.stop();
+            // Release the source handle before Windows can replace it.
+            videoSurface.mpv.command(["stop"]);
+            videoExportController.completeReplacement();
+        }
         function onCompleted(outputUrl) {
-            toast.show("Edited video saved successfully.", false);
+            if (videoExportController.lastWasReplacement) {
+                settingsStore.clearResumePositionFor(prismWindow.editSourcePath);
+                playerController.openFiles([prismWindow.editSourcePath]);
+                toast.show("Original replaced. Backup saved beside it.", false);
+            } else if (videoExportController.error.length > 0) {
+                toast.show("Original unchanged. Edited copy saved.", false);
+            } else {
+                toast.show("Edited video saved successfully.", false);
+            }
         }
     }
 

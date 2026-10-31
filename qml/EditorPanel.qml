@@ -13,12 +13,15 @@ Rectangle {
 
     property var tokens: themeController.tokens
     property string sourceTitle: ""
+    property string sourcePath: ""
+    readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4")
     property real startTime: 0
     property real endTime: 0
     property real duration: 0
 
     signal closeRequested()
     signal exportRequested()
+    signal replaceRequested()
     signal previewRequested()
     signal resetRequested()
 
@@ -187,6 +190,42 @@ Rectangle {
                     color: parent.enabled ? (root.tokens.accentSolid || "#A89BFF")
                                           : (root.tokens.panelBorder || "#444")
                 }
+            }
+
+            Button {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                enabled: root.canReplace && !videoExportController.busy &&
+                         root.endTime - root.startTime >= 0.1
+                text: "Replace original MP4..."
+                onClicked: root.replaceRequested()
+                font.pixelSize: 12
+                background: Rectangle {
+                    radius: 9
+                    color: "transparent"
+                    border.width: 1
+                    border.color: root.tokens.accentSolid || "#A89BFF"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textPrimary || "#fff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: root.canReplace
+                    ? "Replacement preserves the original in a timestamped backup."
+                    : "Replacing the original is supported only for MP4 sources."
+                color: root.tokens.textMuted || "#888"
+                font.pixelSize: 10
+                wrapMode: Text.WordWrap
             }
 
             ColumnLayout {

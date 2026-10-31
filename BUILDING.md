@@ -78,3 +78,24 @@ Only the final successfully encoded file gets its selected name.
 **License note:** FFmpeg builds differ in LGPL/GPL licensing based on
 configuration. Review the build's licenses and attribution before shipping
 FFmpeg to others. The application repo does not redistribute it.
+
+
+### Replacing the original MP4
+In Edit mode, select **Replace original MP4...** (available only for MP4
+sources) and confirm the warning. Prism first finishes the entire encoding
+job into a temporary file. After libmpv releases the source file, Windows
+\`ReplaceFileW\` replaces it with the edited MP4 and keeps a complete,
+timestamped backup named
+\`<title>-prism-backup-<timestamp>-<id>.mp4\` in the original folder.
+
+- **Export edited copy remains the default and safest choice.** Prism never
+  silently overwrites media, and existing copy output names are rejected.
+- The new MP4 keeps the first audio stream; **other audio streams and
+  subtitles are not preserved**. The backup preserves the full original.
+- If the original changes while encoding or Windows refuses the file
+  replacement, Prism attempts to save the completed video as a new
+  \`-trimmed.mp4\` copy, leaving the original untouched.
+- If the fallback copy cannot be saved either, Prism reports where the
+  encoded temporary file remains rather than deleting successful work.
+- Test Replace Original on disposable MP4 files before using valuable
+  videos. Inspect the edited copy and keep the backup until satisfied.
