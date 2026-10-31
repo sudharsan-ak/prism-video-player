@@ -16,12 +16,16 @@ Rectangle {
     property var mpv: null
     property bool libraryOpen: false
     property bool adjustmentsOpen: false
+    property bool editorActive: false
+    property int outstandingExports: 0
 
     signal libraryToggled()
     signal adjustmentsToggled()
     signal openFilesRequested()
     signal addFolderRequested()
     signal loadSubtitleRequested()
+    signal editRequested()
+    signal queueRequested()
 
     // Native title bar is disabled (frameless window), so this bar must
     // provide its own drag-to-move. Sits below every other child so
@@ -99,6 +103,28 @@ Rectangle {
             menu: playbackMenu
             onMenuToggleRequested: playbackMenu.visible ? playbackMenu.close() : playbackMenu.open()
         }
+        Rectangle {
+            id: editEntry
+            height: 26
+            width: editLabel.implicitWidth + 16
+            radius: 6
+            anchors.verticalCenter: parent.verticalCenter
+            color: root.editorActive ? (root.tokens.accentTint || "#333") : "transparent"
+            Text {
+                id: editLabel
+                anchors.centerIn: parent
+                text: "Edit"
+                color: root.editorActive
+                    ? (root.tokens.accentSolid || "#A89BFF")
+                    : (root.tokens.textSecondary || "#888")
+                font.pixelSize: 11
+                font.weight: root.editorActive ? Font.DemiBold : Font.Normal
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.editRequested()
+            }
+        }
         TopMenuLabel {
             id: moreItem
             text: "Tools"
@@ -131,6 +157,36 @@ Rectangle {
             MouseArea { anchors.fill: parent; onClicked: root.libraryToggled() }
         }
 
+    }
+
+    Rectangle {
+        id: exportQueueEntry
+        anchors.right: parent.right
+        anchors.rightMargin: 148
+        anchors.verticalCenter: parent.verticalCenter
+        height: 25
+        width: queueText.implicitWidth + 20
+        radius: 7
+        color: root.outstandingExports > 0
+            ? (root.tokens.accentTint || "#333") : "transparent"
+        border.color: root.tokens.panelBorder || "#444"
+        border.width: 1
+        Text {
+            id: queueText
+            anchors.centerIn: parent
+            text: root.outstandingExports > 0
+                ? "Exports (" + root.outstandingExports + ")" : "Exports"
+            color: root.outstandingExports > 0
+                ? (root.tokens.accentSolid || "#A89BFF")
+                : (root.tokens.textSecondary || "#888")
+            font.pixelSize: 10
+            font.weight: Font.DemiBold
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.queueRequested()
+        }
     }
 
     // Standard Windows title-bar sizing: ~46px-wide click zones (not a
@@ -225,7 +281,7 @@ Rectangle {
             glyph: ""
             onClicked: prismWindow.visibility === Window.Maximized ? prismWindow.showNormal() : prismWindow.showMaximized()
         }
-        WindowControlButton { glyph: "✕"; isClose: true; onClicked: Qt.quit() }
+        WindowControlButton { glyph: "✕"; isClose: true; onClicked: prismWindow.requestClose() }
     }
 
     // Each Menu is parented to its own TopMenuLabel button, not to the

@@ -24,6 +24,17 @@ Item {
     property var mpv: null
     property bool active: false
 
+    function formatTime(seconds) {
+        const exact = Math.max(0, seconds || 0);
+        const whole = Math.floor(exact);
+        const m = Math.floor(whole / 60);
+        const sec = whole % 60;
+        const base = m + ":" + String(sec).padStart(2, "0");
+        return mpv && mpv.duration > 0 && mpv.duration < 10
+            ? base + "." + String(Math.floor((exact - whole) * 100 + 0.001)).padStart(2, "0")
+            : base;
+    }
+
     function notifyActivity() {
         visibleBar.opacity = 1;
         idleTimer.restart();
@@ -102,11 +113,7 @@ Item {
                     spacing: 9
 
                     Text {
-                        text: {
-                            const s = Math.max(0, Math.floor(fullscreenSeek.displayPosition));
-                            const m = Math.floor(s / 60), sec = s % 60;
-                            return m + ":" + String(sec).padStart(2, "0");
-                        }
+                        text: root.formatTime(fullscreenSeek.displayPosition)
                         font.pixelSize: 9
                         color: "#D8D2C4"
                         width: 32
@@ -121,11 +128,7 @@ Item {
                     }
 
                     Text {
-                        text: {
-                            const s = Math.max(0, Math.floor((mpv ? mpv.duration : 0)));
-                            const m = Math.floor(s / 60), sec = s % 60;
-                            return m + ":" + String(sec).padStart(2, "0");
-                        }
+                        text: root.formatTime(mpv ? mpv.duration : 0)
                         font.pixelSize: 9
                         color: "#D8D2C4"
                         width: 32

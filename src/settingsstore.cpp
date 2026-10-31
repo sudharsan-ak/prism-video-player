@@ -59,6 +59,29 @@ void SettingsStore::load()
     if (thickness == QStringLiteral("slim") || thickness == QStringLiteral("medium")
         || thickness == QStringLiteral("thick"))
         m_seekBarThickness = thickness;
+    m_keepBackupOnReplace = root.value("keepBackupOnReplace").toBool(false);
+    const QString preset = root.value("encodingPreset").toString(QStringLiteral("veryfast"));
+    if (preset == QStringLiteral("ultrafast") || preset == QStringLiteral("veryfast") ||
+        preset == QStringLiteral("fast") || preset == QStringLiteral("medium") ||
+        preset == QStringLiteral("slow"))
+        m_encodingPreset = preset;
+    const QString gifPreset = root.value("gifQualityPreset").toString(QStringLiteral("balanced"));
+    if (gifPreset == QStringLiteral("high") || gifPreset == QStringLiteral("balanced") ||
+        gifPreset == QStringLiteral("compact"))
+        m_gifQualityPreset = gifPreset;
+    const QString mp4Mode = root.value("mp4ExportMode").toString(QStringLiteral("auto"));
+    if (mp4Mode == QStringLiteral("auto") || mp4Mode == QStringLiteral("saveAs"))
+        m_mp4ExportMode = mp4Mode;
+    else if (mp4Mode == QStringLiteral("replace") &&
+             root.value("replaceModeConfirmed").toBool(false)) {
+        // Existing users who selected "replace" in an older version
+        // did NOT authorize future replacements without a prompt.
+        m_mp4ExportMode = mp4Mode;
+        m_replaceModeConfirmed = true;
+    }
+    const QString gifMode = root.value("gifExportMode").toString(QStringLiteral("auto"));
+    if (gifMode == QStringLiteral("auto") || gifMode == QStringLiteral("saveAs"))
+        m_gifExportMode = gifMode;
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
     if (root.contains("bookmarks") && root["bookmarks"].isObject())
@@ -78,6 +101,12 @@ void SettingsStore::save()
     root["theme"] = m_themeName;
     root["resumeEnabled"] = m_resumeEnabled;
     root["seekBarThickness"] = m_seekBarThickness;
+    root["keepBackupOnReplace"] = m_keepBackupOnReplace;
+    root["encodingPreset"] = m_encodingPreset;
+    root["gifQualityPreset"] = m_gifQualityPreset;
+    root["mp4ExportMode"] = m_mp4ExportMode;
+    root["replaceModeConfirmed"] = m_replaceModeConfirmed;
+    root["gifExportMode"] = m_gifExportMode;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
 
@@ -128,6 +157,75 @@ void SettingsStore::setSeekBarThickness(const QString &thickness)
         return;
     m_seekBarThickness = thickness;
     emit seekBarThicknessChanged();
+    save();
+}
+
+void SettingsStore::setKeepBackupOnReplace(bool enabled)
+{
+    if (m_keepBackupOnReplace == enabled)
+        return;
+    m_keepBackupOnReplace = enabled;
+    emit keepBackupOnReplaceChanged();
+    save();
+}
+
+void SettingsStore::setEncodingPreset(const QString &preset)
+{
+    if (preset != QStringLiteral("ultrafast") && preset != QStringLiteral("veryfast") &&
+        preset != QStringLiteral("fast") && preset != QStringLiteral("medium") &&
+        preset != QStringLiteral("slow"))
+        return;
+    if (m_encodingPreset == preset)
+        return;
+    m_encodingPreset = preset;
+    emit encodingPresetChanged();
+    save();
+}
+
+void SettingsStore::setGifQualityPreset(const QString &preset)
+{
+    if (preset != QStringLiteral("high") && preset != QStringLiteral("balanced") &&
+        preset != QStringLiteral("compact"))
+        return;
+    if (preset == m_gifQualityPreset)
+        return;
+    m_gifQualityPreset = preset;
+    emit gifQualityPresetChanged();
+    save();
+}
+
+void SettingsStore::setMp4ExportMode(const QString &mode)
+{
+    // "replace" can be enabled only through confirmReplaceMode(),
+    // following the explicit one-time warning to the user.
+    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs"))
+        return;
+    if (mode == m_mp4ExportMode && !m_replaceModeConfirmed)
+        return;
+    m_mp4ExportMode = mode;
+    m_replaceModeConfirmed = false;
+    emit mp4ExportModeChanged();
+    save();
+}
+
+void SettingsStore::confirmReplaceMode()
+{
+    if (m_mp4ExportMode == QStringLiteral("replace") && m_replaceModeConfirmed)
+        return;
+    m_replaceModeConfirmed = true;
+    m_mp4ExportMode = QStringLiteral("replace");
+    emit mp4ExportModeChanged();
+    save();
+}
+
+void SettingsStore::setGifExportMode(const QString &mode)
+{
+    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs"))
+        return;
+    if (mode == m_gifExportMode)
+        return;
+    m_gifExportMode = mode;
+    emit gifExportModeChanged();
     save();
 }
 

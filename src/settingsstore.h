@@ -17,6 +17,11 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString themeName READ themeName WRITE setThemeName NOTIFY themeNameChanged)
     Q_PROPERTY(bool resumeEnabled READ resumeEnabled WRITE setResumeEnabled NOTIFY resumeEnabledChanged)
     Q_PROPERTY(QString seekBarThickness READ seekBarThickness WRITE setSeekBarThickness NOTIFY seekBarThicknessChanged)
+    Q_PROPERTY(bool keepBackupOnReplace READ keepBackupOnReplace WRITE setKeepBackupOnReplace NOTIFY keepBackupOnReplaceChanged)
+    Q_PROPERTY(QString encodingPreset READ encodingPreset WRITE setEncodingPreset NOTIFY encodingPresetChanged)
+    Q_PROPERTY(QString gifQualityPreset READ gifQualityPreset WRITE setGifQualityPreset NOTIFY gifQualityPresetChanged)
+    Q_PROPERTY(QString mp4ExportMode READ mp4ExportMode WRITE setMp4ExportMode NOTIFY mp4ExportModeChanged)
+    Q_PROPERTY(QString gifExportMode READ gifExportMode WRITE setGifExportMode NOTIFY gifExportModeChanged)
 
 public:
     explicit SettingsStore(QObject *parent = nullptr);
@@ -31,6 +36,19 @@ public:
 
     QString seekBarThickness() const { return m_seekBarThickness; }
     void setSeekBarThickness(const QString &thickness);
+
+    bool keepBackupOnReplace() const { return m_keepBackupOnReplace; }
+    void setKeepBackupOnReplace(bool enabled);
+    QString encodingPreset() const { return m_encodingPreset; }
+    void setEncodingPreset(const QString &preset);
+    QString gifQualityPreset() const { return m_gifQualityPreset; }
+    void setGifQualityPreset(const QString &preset);
+    QString mp4ExportMode() const { return m_mp4ExportMode; }
+    void setMp4ExportMode(const QString &mode);
+    // Only call after explicit confirmation in the export mode dialog.
+    Q_INVOKABLE void confirmReplaceMode();
+    QString gifExportMode() const { return m_gifExportMode; }
+    void setGifExportMode(const QString &mode);
 
     Q_INVOKABLE void bumpRecent(const QString &path);
     Q_INVOKABLE void clearRecent();
@@ -51,6 +69,11 @@ signals:
     void volumeChanged();
     void themeNameChanged();
     void seekBarThicknessChanged();
+    void keepBackupOnReplaceChanged();
+    void encodingPresetChanged();
+    void gifQualityPresetChanged();
+    void mp4ExportModeChanged();
+    void gifExportModeChanged();
     void resumeEnabledChanged();
 
 private:
@@ -62,6 +85,14 @@ private:
     QString m_themeName = QStringLiteral("warmGlass");
     bool m_resumeEnabled = true;
     QString m_seekBarThickness = QStringLiteral("slim");
+    bool m_keepBackupOnReplace = false;
+    QString m_encodingPreset = QStringLiteral("veryfast");
+    QString m_gifQualityPreset = QStringLiteral("balanced");
+    QString m_mp4ExportMode = QStringLiteral("auto");
+    // Old builds confirmed each replace action instead. Require users of
+    // those settings to opt into the new one-click destructive behavior.
+    bool m_replaceModeConfirmed = false;
+    QString m_gifExportMode = QStringLiteral("auto");
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}
 };

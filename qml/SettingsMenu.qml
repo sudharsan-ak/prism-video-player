@@ -47,6 +47,13 @@ Menu {
     }
     MenuSeparator {}
     MenuItem {
+        text: "Keep backup when replacing original"
+        checkable: true
+        checked: settingsStore.keepBackupOnReplace
+        onTriggered: settingsStore.keepBackupOnReplace = !settingsStore.keepBackupOnReplace
+    }
+    MenuSeparator {}
+    MenuItem {
         text: "Resume playback position"
         checkable: true
         checked: settingsStore.resumeEnabled
