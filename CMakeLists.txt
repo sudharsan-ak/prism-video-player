@@ -26,6 +26,8 @@ qt_add_executable(Prism
     src/settingsstore.h
     src/themecontroller.cpp
     src/themecontroller.h
+    src/videoexportcontroller.cpp
+    src/videoexportcontroller.h
     resources/prism.rc
 )
 
@@ -85,3 +87,13 @@ add_custom_command(TARGET Prism POST_BUILD
         "${MPV_ROOT}/bin/libmpv-2.dll"
         "$<TARGET_FILE_DIR:Prism>/libmpv-2.dll"
 )
+
+# Optional local FFmpeg binary for native video exports. The repository
+# does not ship FFmpeg; users supply a properly licensed Windows build.
+if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/ffmpeg/bin/ffmpeg.exe")
+    add_custom_command(TARGET Prism POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/vendor/ffmpeg/bin/ffmpeg.exe"
+            "$<TARGET_FILE_DIR:Prism>/ffmpeg.exe"
+    )
+endif()
