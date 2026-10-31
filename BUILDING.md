@@ -148,3 +148,18 @@ cancel and failed replacement, thumbnail reuse and all six themes.
 - Test sound toggle in preview and both MP4 export modes; verify the
   muted file has no audio stream. Also test GIF speed, loop behavior,
   output size, cancellation, and reopening normal audio playback.
+
+## Trim editor UI and GIF startup improvements
+
+- Play range / Pause now uses a fixed-size QML pause symbol (two aligned
+  rectangles), avoiding the inconsistent spacing of the old Unicode glyph.
+- GIF export no longer needs to analyze the entire selection before the
+  first output frames can be processed. Prism builds a stable GIF palette
+  from up to the first **2 seconds of the speed-adjusted output** instead.
+  It keeps the existing 12 fps / 640 px / looping GIF options.
+  This improves startup on longer selections, but if later scenes have
+  substantially different colors the GIF's color fidelity may be lower
+  than a full-clip palette.
+- Verify pause-button alignment in different themes, and compare GIF
+  startup time, color, speed-adjusted duration, and file size against
+  previous builds with short and long clips.

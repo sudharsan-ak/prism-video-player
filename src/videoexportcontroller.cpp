@@ -210,12 +210,15 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral("-i"), source.absoluteFilePath()
     };
     if (animatedGif) {
-        // GIF contains no sound. Build a full-color palette for this clip,
-        // then apply it to 12fps frames no wider than 640 pixels.
+        // GIF contains no sound. Using the complete video to generate one
+        // palette delays the first encoded GIF frame until the full clip
+        // is analyzed. Sample up to the first two output seconds for a
+        // faster start, while retaining a stable palette for the GIF.
+        // Trade-off: later scene changes may be less accurately colored.
         const QString gifFilter = QStringLiteral(
             "[0:v]setpts=(PTS-STARTPTS)/%1,fps=12,"
             "scale='min(640,iw)':-1:flags=lanczos,split[frames][colors];"
-            "[colors]palettegen=stats_mode=full[palette];"
+            "[colors]trim=duration=2,setpts=PTS-STARTPTS,palettegen=stats_mode=full[palette];"
             "[frames][palette]paletteuse=dither=sierra2_4a[gifout]").arg(speed);
         args << QStringLiteral("-filter_complex") << gifFilter
              << QStringLiteral("-map") << QStringLiteral("[gifout]")

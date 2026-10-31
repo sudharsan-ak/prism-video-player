@@ -266,8 +266,58 @@ Rectangle {
             }
 
             TrimButton {
-                text: root.previewPlaying ? "❚❚ Pause" : "▶ Play range"
+                id: rangePlaybackButton
+                text: root.previewPlaying ? "Pause" : "Play range"
                 onClicked: root.togglePlaybackRequested()
+                // The previous ❚❚ characters had font-dependent spacing.
+                // Draw two aligned bars ourselves for a compact pause icon.
+                contentItem: Item {
+                    implicitWidth: playbackContents.implicitWidth
+                    implicitHeight: playbackContents.implicitHeight
+                    Row {
+                        id: playbackContents
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        Item {
+                            width: 12
+                            height: 14
+                            y: (playbackContents.height - height) / 2
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "▶"
+                                font.pixelSize: 12
+                                color: root.tokens.textPrimary || "#fff"
+                                visible: !root.previewPlaying
+                            }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
+                                visible: root.previewPlaying
+                                Rectangle {
+                                    width: 3
+                                    height: 11
+                                    radius: 1
+                                    color: root.tokens.textPrimary || "#fff"
+                                }
+                                Rectangle {
+                                    width: 3
+                                    height: 11
+                                    radius: 1
+                                    color: root.tokens.textPrimary || "#fff"
+                                }
+                            }
+                        }
+                        Text {
+                            text: rangePlaybackButton.text
+                            font: rangePlaybackButton.font
+                            color: root.tokens.textPrimary || "#fff"
+                            y: (playbackContents.height - height) / 2
+                        }
+                    }
+                }
             }
             TrimButton {
                 id: speedButton
