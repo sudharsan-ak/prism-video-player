@@ -69,6 +69,13 @@ void SettingsStore::load()
     if (gifPreset == QStringLiteral("high") || gifPreset == QStringLiteral("balanced") ||
         gifPreset == QStringLiteral("compact"))
         m_gifQualityPreset = gifPreset;
+    const QString mp4Mode = root.value("mp4ExportMode").toString(QStringLiteral("auto"));
+    if (mp4Mode == QStringLiteral("auto") || mp4Mode == QStringLiteral("saveAs") ||
+        mp4Mode == QStringLiteral("replace"))
+        m_mp4ExportMode = mp4Mode;
+    const QString gifMode = root.value("gifExportMode").toString(QStringLiteral("auto"));
+    if (gifMode == QStringLiteral("auto") || gifMode == QStringLiteral("saveAs"))
+        m_gifExportMode = gifMode;
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
     if (root.contains("bookmarks") && root["bookmarks"].isObject())
@@ -91,6 +98,8 @@ void SettingsStore::save()
     root["keepBackupOnReplace"] = m_keepBackupOnReplace;
     root["encodingPreset"] = m_encodingPreset;
     root["gifQualityPreset"] = m_gifQualityPreset;
+    root["mp4ExportMode"] = m_mp4ExportMode;
+    root["gifExportMode"] = m_gifExportMode;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
 
@@ -175,6 +184,29 @@ void SettingsStore::setGifQualityPreset(const QString &preset)
         return;
     m_gifQualityPreset = preset;
     emit gifQualityPresetChanged();
+    save();
+}
+
+void SettingsStore::setMp4ExportMode(const QString &mode)
+{
+    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs") &&
+        mode != QStringLiteral("replace"))
+        return;
+    if (mode == m_mp4ExportMode)
+        return;
+    m_mp4ExportMode = mode;
+    emit mp4ExportModeChanged();
+    save();
+}
+
+void SettingsStore::setGifExportMode(const QString &mode)
+{
+    if (mode != QStringLiteral("auto") && mode != QStringLiteral("saveAs"))
+        return;
+    if (mode == m_gifExportMode)
+        return;
+    m_gifExportMode = mode;
+    emit gifExportModeChanged();
     save();
 }
 

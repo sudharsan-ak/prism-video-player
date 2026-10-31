@@ -20,9 +20,13 @@ Rectangle {
     property real editSpeed: 1.0
     property bool previewPlaying: false
     property bool muteAudio: false
+    property bool sourceIsMp4: false
 
     signal startTimeEdited(real seconds)
     signal endTimeEdited(real seconds)
+    signal rangeMoveStarted()
+    signal rangeMoved(real newStart, real newEnd)
+    signal rangeMoveFinished(real newStart)
     signal seekRequested(real seconds)
     signal previewRequested()
     signal togglePlaybackRequested()
@@ -210,6 +214,44 @@ Rectangle {
                     }
                 }
             }
+
+            // Only the interior of the highlighted selection catches the
+            // drag. Leave 14px on either edge for RangeSlider IN/OUT handles.
+            MouseArea {
+                id: moveSelectionArea
+                property real pressX: 0
+                property real originalStart: 0
+                property real originalEnd: 0
+                x: frameTrack.x + trimRange.first.visualPosition * frameTrack.width + 14
+                y: frameTrack.y
+                width: Math.max(0, (trimRange.second.visualPosition -
+                    trimRange.first.visualPosition) * frameTrack.width - 28)
+                height: frameTrack.height
+                visible: width > 10 && root.duration > 0
+                z: 5
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                preventStealing: true
+                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                onPressed: function(mouse) {
+                    pressX = moveSelectionArea.mapToItem(frameTrack, mouse.x, mouse.y).x;
+                    originalStart = root.startTime;
+                    originalEnd = root.endTime;
+                    root.rangeMoveStarted();
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed || root.duration <= 0 || frameTrack.width <= 0)
+                        return;
+                    const pointerX = moveSelectionArea.mapToItem(
+                        frameTrack, mouse.x, mouse.y).x;
+                    const delta = (pointerX - pressX) * root.duration / frameTrack.width;
+                    const span = originalEnd - originalStart;
+                    const start = Math.max(0, Math.min(root.duration - span,
+                                                     originalStart + delta));
+                    root.rangeMoved(start, start + span);
+                }
+                onReleased: root.rangeMoveFinished(root.startTime)
+            }
         }
 
         ThemedSeekBar {
@@ -361,8 +403,12 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             TrimButton {
-                text: "Queue MP4"
-                enabled: exportQueue.canQueue
+                text: settingsStore.mp4ExportMode === "replace" ? "Replace MP4" :
+                      settingsStore.mp4ExportMode === "saveAs" ? "Save MP4 as..." : "Queue MP4"
+                enabled: root.endTime - root.startTime >= 0.1 &&
+                    (settingsStore.mp4ExportMode === "replace"
+                        ? root.sourceIsMp4 && !exportQueue.hasOutstanding &&
+                          !videoExportController.busy : exportQueue.canQueue)
                 onClicked: root.exportRequested()
             }
         }

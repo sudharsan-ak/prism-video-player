@@ -227,3 +227,26 @@ content; fine detail and motion may be reduced on Balanced/Compact.
 - Verify direct queue on repeated clicks, auto-incremented filenames,
   no Save As window on primary actions, optional Save As operations,
   job snapshots, and normal queued progress.
+
+## Compact export dock and moveable trim selection
+
+- Right panel now has one themed compact **MP4 | GIF | ⚙** dock, with
+  a small summary of the configured action for each format. The gear
+  opens export behavior settings:
+  - MP4: quick queued copy (default), Windows Save As and queue, or
+    Replace original MP4 (confirmation, exclusive, backup setting honored).
+  - GIF: quick queued GIF (default) or Windows Save As and queue.
+- These choices persist in settings.json as `mp4ExportMode` and
+  `gifExportMode`. Selecting Replace Original for MP4 never bypasses
+  the confirmation or permits replacing a non-MP4 source or a source
+  while another export job remains outstanding. The trim timeline's
+  quick MP4 action respects the same selected mode.
+- The highlighted trim selection interior can now be **dragged left or
+  right as a unit**. The selected duration stays constant and the
+  range stops at the clip boundaries. IN and OUT handle dragging
+  remains independent. Hover shows an open-hand cursor and dragging
+  shows a closed hand.
+- Acceptance: validate all five export-mode choices, persistence after
+  relaunch, MP4 replacement protection while queue busy, auto naming
+  and manual Save As; move selection near both boundaries and resize
+  handles separately; verify every Prism theme.

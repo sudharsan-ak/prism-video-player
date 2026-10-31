@@ -12,6 +12,10 @@ Rectangle {
     border.width: 1
 
     property var tokens: themeController.tokens
+    onVisibleChanged: {
+        if (!visible)
+            exportModePopup.close();
+    }
     property string sourceTitle: ""
     property string sourcePath: ""
     readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4")
@@ -34,12 +38,85 @@ Rectangle {
     signal closeRequested()
     signal exportRequested()
     signal exportGifRequested()
-    signal chooseMp4DestinationRequested()
-    signal chooseGifDestinationRequested()
-    signal replaceRequested()
-    signal previewRequested()
+     signal previewRequested()
     signal resetRequested()
     signal queueRequested()
+
+    function mp4ModeLabel() {
+        switch (settingsStore.mp4ExportMode) {
+        case "saveAs": return "Save As dialog";
+        case "replace": return "Replace original";
+        default: return "Quick copy";
+        }
+    }
+    function gifModeLabel() {
+        return settingsStore.gifExportMode === "saveAs" ? "Save As dialog" : "Quick GIF";
+    }
+
+    component ModeChoice: Button {
+        id: choice
+        property string detail: ""
+        property bool selected: false
+        Layout.fillWidth: true
+        Layout.preferredHeight: 43
+        padding: 7
+        font.pixelSize: 11
+        background: Rectangle {
+            radius: 7
+            color: choice.selected ? (root.tokens.accentTint || "#183424")
+                                   : (choice.hovered ? (root.tokens.panelGlass || "#181D19") : "transparent")
+            border.width: choice.selected ? 1 : 0
+            border.color: root.tokens.accentSolid || "#2BFA83"
+        }
+        contentItem: RowLayout {
+            spacing: 9
+            Rectangle {
+                Layout.preferredWidth: 12
+                Layout.preferredHeight: 12
+                radius: 6
+                color: choice.selected ? (root.tokens.accentSolid || "#2BFA83") : "transparent"
+                border.width: 1
+                border.color: choice.selected
+                    ? (root.tokens.accentSolid || "#2BFA83")
+                    : (root.tokens.textMuted || "#777")
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 4
+                    height: 4
+                    radius: 2
+                    color: root.tokens.videoCardBackground || "#08130B"
+                    visible: choice.selected
+                }
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+                Text {
+                    text: choice.text
+                    color: root.tokens.textPrimary || "white"
+                    font.pixelSize: 11
+                    font.bold: choice.selected
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: choice.detail
+                    color: root.tokens.textSecondary || "#AAA"
+                    font.pixelSize: 9
+                    elide: Text.ElideRight
+                }
+            }
+        }
+    }
+
+    function showExportModePopup() {
+        const overlay = exportModePopup.parent;
+        const pt = settingsButton.mapToItem(overlay, 0, 0);
+        exportModePopup.x = Math.max(8, Math.min(pt.x + settingsButton.width - exportModePopup.width,
+                                               prismWindow.width - exportModePopup.width - 8));
+        exportModePopup.y = Math.max(8, Math.min(pt.y + settingsButton.height + 6,
+                                               prismWindow.height - exportModePopup.height - 8));
+        exportModePopup.open();
+    }
 
     function timeText(seconds) {
         let s = Math.max(0, Math.floor(seconds || 0));
@@ -301,105 +378,137 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
-            Button {
+            Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
-                text: "Add MP4 to export queue"
-                onClicked: root.exportRequested()
-                font.pixelSize: 12
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: "QUICK EXPORT"
+                font.pixelSize: 10
                 font.bold: true
-                contentItem: Text {
-                    text: parent.text
-                    color: root.tokens.videoCardBackground || "#121212"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font: parent.font
-                }
-                background: Rectangle {
-                    radius: 9
-                    color: parent.enabled ? (root.tokens.accentSolid || "#A89BFF")
-                                          : (root.tokens.panelBorder || "#444")
-                }
+                color: root.tokens.textMuted || "#999"
             }
 
-            Button {
+            Rectangle {
+                id: minimalDock
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
-                text: "Add GIF to export queue"
-                onClicked: root.exportGifRequested()
-                font.pixelSize: 12
-                background: Rectangle {
-                    radius: 9
-                    color: root.tokens.panelGlassStrong || "#242331"
-                    border.width: 1
-                    border.color: root.tokens.accentSolid || "#A89BFF"
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: root.tokens.textPrimary || "#fff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font: parent.font
-                }
-            }
+                Layout.preferredHeight: 48
+                color: root.tokens.panelGlassStrong || "#111A13"
+                border.color: root.tokens.panelBorder || "#375443"
+                border.width: 1
+                radius: 10
 
-            Button {
-                id: chooseOutputLocation
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
-                text: "Choose output location... ▾"
-                onClicked: locationMenu.open()
-                font.pixelSize: 11
-                flat: true
-                contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.textSecondary || "#aaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                Menu {
-                    id: locationMenu
-                    parent: chooseOutputLocation
-                    y: chooseOutputLocation.height
-                    MenuItem {
-                        text: "Save MP4 as..."
-                        onTriggered: root.chooseMp4DestinationRequested()
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 5
+                    spacing: 5
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        enabled: root.endTime - root.startTime >= 0.1 &&
+                            (settingsStore.mp4ExportMode === "replace"
+                                ? (root.canReplace && !exportQueue.hasOutstanding &&
+                                   !videoExportController.busy) : exportQueue.canQueue)
+                        text: "MP4"
+                        onClicked: root.exportRequested()
+                        font.bold: true
+                        font.pixelSize: 12
+                        background: Rectangle {
+                            radius: 7
+                            color: parent.enabled ? (root.tokens.accentSolid || "#2BFA83")
+                                                   : (root.tokens.panelBorder || "#444")
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: root.tokens.videoCardBackground || "#092111"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "MP4: " + root.mp4ModeLabel()
                     }
-                    MenuItem {
-                        text: "Save GIF as..."
-                        onTriggered: root.chooseGifDestinationRequested()
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
+                        text: "GIF"
+                        onClicked: root.exportGifRequested()
+                        font.bold: true
+                        font.pixelSize: 12
+                        background: Rectangle {
+                            radius: 7
+                            color: root.tokens.accentTint || "#132319"
+                            border.color: root.tokens.accentSolid || "#2BFA83"
+                            border.width: 1
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: root.tokens.textPrimary || "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "GIF: " + root.gifModeLabel()
+                    }
+
+                    Button {
+                        id: settingsButton
+                        Layout.preferredWidth: 36
+                        Layout.fillHeight: true
+                        text: "⚙"
+                        onClicked: root.showExportModePopup()
+                        font.pixelSize: 17
+                        background: Rectangle {
+                            radius: 7
+                            color: root.tokens.accentTint || "#14231A"
+                            border.color: root.tokens.panelBorder || "#375443"
+                            border.width: 1
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: root.tokens.textPrimary || "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Configure MP4 and GIF export actions"
                     }
                 }
             }
 
-            Button {
+            Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                enabled: root.canReplace && !videoExportController.busy &&
-                         !exportQueue.hasOutstanding && root.endTime - root.startTime >= 0.1
-                text: "Replace original MP4..."
-                onClicked: root.replaceRequested()
-                font.pixelSize: 12
-                background: Rectangle {
-                    radius: 9
-                    color: "transparent"
-                    border.width: 1
-                    border.color: root.tokens.accentSolid || "#A89BFF"
-                }
-                contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.textPrimary || "#fff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                Layout.preferredHeight: 55
+                radius: 8
+                color: root.tokens.panelGlassStrong || "#0B150E"
+                border.color: root.tokens.panelBorder || "#25412F"
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+                    Text {
+                        text: "●  MP4   " + root.mp4ModeLabel()
+                        color: root.tokens.textSecondary || "#9DBBAC"
+                        font.pixelSize: 10
+                        elide: Text.ElideRight
+                        width: parent.width
+                    }
+                    Text {
+                        text: "●  GIF      " + root.gifModeLabel()
+                        color: root.tokens.textSecondary || "#9DBBAC"
+                        font.pixelSize: 10
+                        elide: Text.ElideRight
+                        width: parent.width
+                    }
                 }
             }
 
@@ -407,13 +516,14 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                text: root.canReplace
-                    ? (exportQueue.hasOutstanding
-                        ? "Replace original is available after the export queue finishes."
-                        : settingsStore.keepBackupOnReplace
-                            ? "Backup enabled. A timestamped original will be kept."
-                            : "Backup OFF. Change this in Tools → Settings.")
-                    : "Replacing the original is supported only for MP4 sources."
+                visible: settingsStore.mp4ExportMode === "replace"
+                text: !root.canReplace
+                    ? "Replace original is available only for MP4 source files."
+                    : exportQueue.hasOutstanding
+                        ? "Replacement is available after the export queue finishes."
+                        : (settingsStore.keepBackupOnReplace
+                            ? "Backup ON. Original is preserved on replacement."
+                            : "Backup OFF. Replacing the original cannot be undone.")
                 color: root.tokens.textMuted || "#888"
                 font.pixelSize: 10
                 wrapMode: Text.WordWrap
@@ -452,4 +562,100 @@ Rectangle {
             Item { Layout.preferredHeight: 15 }
         }
     }
+    Popup {
+        id: exportModePopup
+        parent: Overlay.overlay
+        width: 318
+        height: 370
+        padding: 12
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 11
+            color: root.tokens.panelGlassStrong || "#111A13"
+            border.color: root.tokens.accentSolid || "#2BFA83"
+            border.width: 1
+        }
+        contentItem: ColumnLayout {
+            spacing: 5
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: "⚙  Export behavior"
+                    color: root.tokens.textPrimary || "white"
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+                Button {
+                    text: "✕"
+                    flat: true
+                    onClicked: exportModePopup.close()
+                    contentItem: Text {
+                        text: parent.text
+                        color: root.tokens.textSecondary || "#AAA"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+            Text {
+                text: "WHEN YOU CLICK MP4"
+                font.pixelSize: 9
+                font.bold: true
+                color: root.tokens.textMuted || "#888"
+            }
+            ModeChoice {
+                text: "Export a copy automatically"
+                detail: "Queue a uniquely named MP4 beside the source"
+                selected: settingsStore.mp4ExportMode === "auto"
+                onClicked: settingsStore.mp4ExportMode = "auto"
+            }
+            ModeChoice {
+                text: "Choose name and folder"
+                detail: "Open Windows Save As, then add to queue"
+                selected: settingsStore.mp4ExportMode === "saveAs"
+                onClicked: settingsStore.mp4ExportMode = "saveAs"
+            }
+            ModeChoice {
+                text: "Replace original MP4"
+                detail: "Confirm before replacing; queue must be empty"
+                selected: settingsStore.mp4ExportMode === "replace"
+                enabled: root.canReplace
+                onClicked: settingsStore.mp4ExportMode = "replace"
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: root.tokens.panelBorder || "#444"
+            }
+            Text {
+                text: "WHEN YOU CLICK GIF"
+                font.pixelSize: 9
+                font.bold: true
+                color: root.tokens.textMuted || "#888"
+            }
+            ModeChoice {
+                text: "Export GIF automatically"
+                detail: "Queue a uniquely named GIF beside the source"
+                selected: settingsStore.gifExportMode === "auto"
+                onClicked: settingsStore.gifExportMode = "auto"
+            }
+            ModeChoice {
+                text: "Choose name and folder"
+                detail: "Open Windows Save As, then add to queue"
+                selected: settingsStore.gifExportMode === "saveAs"
+                onClicked: settingsStore.gifExportMode = "saveAs"
+            }
+            Text {
+                Layout.fillWidth: true
+                text: "Backup preference remains in Tools → Settings."
+                wrapMode: Text.WordWrap
+                font.pixelSize: 9
+                color: root.tokens.textMuted || "#888"
+            }
+        }
+    }
+
 }

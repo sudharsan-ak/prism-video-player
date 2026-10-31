@@ -146,6 +146,37 @@ ApplicationWindow {
         toast.show((animatedGif ? "GIF" : "MP4") + " added to export queue.", false);
     }
 
+
+    function triggerMp4Export() {
+        if (!editMode)
+            return;
+        const mode = settingsStore.mp4ExportMode;
+        if (mode === "saveAs") {
+            openTrimSaveDialog();
+        } else if (mode === "replace") {
+            if (!editSourcePath.toLowerCase().endsWith(".mp4")) {
+                toast.show("Replacing the original is available only for MP4 files.", true);
+                return;
+            }
+            if (exportQueue.hasOutstanding || videoExportController.busy) {
+                toast.show("Finish queued exports before replacing the original.", true);
+                return;
+            }
+            replaceConfirmDialog.open();
+        } else {
+            enqueueCurrentTrim(false);
+        }
+    }
+
+    function triggerGifExport() {
+        if (!editMode)
+            return;
+        if (settingsStore.gifExportMode === "saveAs")
+            openGifSaveDialog();
+        else
+            enqueueCurrentTrim(true);
+    }
+
     function openGifSaveDialog() {
         if (!editMode || !exportQueue.canQueue)
             return;
@@ -308,6 +339,22 @@ ApplicationWindow {
                         prismWindow.editSpeed = value;
                         playerController.setSpeed(value);
                     }
+                    sourceIsMp4: prismWindow.editSourcePath.toLowerCase().endsWith(".mp4")
+                    onRangeMoveStarted: prismWindow.stopRangePreview()
+                    onRangeMoved: function(newStart, newEnd) {
+                        // Assign the leading boundary last to avoid momentary
+                        // RangeSlider handle crossing during a large drag.
+                        if (newStart > prismWindow.editStart) {
+                            prismWindow.editEnd = newEnd;
+                            prismWindow.editStart = newStart;
+                        } else {
+                            prismWindow.editStart = newStart;
+                            prismWindow.editEnd = newEnd;
+                        }
+                    }
+                    onRangeMoveFinished: function(newStart) {
+                        playerController.seek(newStart);
+                    }
                     onStartTimeEdited: function(seconds) {
                         prismWindow.stopRangePreview();
                         prismWindow.editStart = Math.max(0, Math.min(seconds, prismWindow.editEnd - 0.1));
@@ -326,7 +373,7 @@ ApplicationWindow {
                         prismWindow.editStart = 0;
                         prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
                     }
-                    onExportRequested: prismWindow.enqueueCurrentTrim(false)
+                    onExportRequested: prismWindow.triggerMp4Export()
                 }
             }
 
@@ -351,13 +398,10 @@ ApplicationWindow {
                 editSpeed: prismWindow.editSpeed
                 muteAudio: prismWindow.editMuted
                 onCloseRequested: prismWindow.leaveEditing()
-                onExportRequested: prismWindow.enqueueCurrentTrim(false)
-                onExportGifRequested: prismWindow.enqueueCurrentTrim(true)
-                onChooseMp4DestinationRequested: prismWindow.openTrimSaveDialog()
-                onChooseGifDestinationRequested: prismWindow.openGifSaveDialog()
-                onQueueRequested: exportQueuePopup.open()
-                onReplaceRequested: replaceConfirmDialog.open()
-                onPreviewRequested: prismWindow.previewEditRange()
+                onExportRequested: prismWindow.triggerMp4Export()
+                onExportGifRequested: prismWindow.triggerGifExport()
+                 onQueueRequested: exportQueuePopup.open()
+                 onPreviewRequested: prismWindow.previewEditRange()
                 onResetRequested: {
                     prismWindow.editStart = 0;
                     prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
