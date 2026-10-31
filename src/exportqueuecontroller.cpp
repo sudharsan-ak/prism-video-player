@@ -80,7 +80,8 @@ QVariantList ExportQueueController::jobs() const
         item.insert(QStringLiteral("start"), job.start);
         item.insert(QStringLiteral("end"), job.end);
         item.insert(QStringLiteral("speed"), job.speed);
-        item.insert(QStringLiteral("mute"), job.mute);
+        item.insert(QStringLiteral("mute"), job.audioVolumePercent == 0);
+        item.insert(QStringLiteral("audioVolume"), job.audioVolumePercent);
         item.insert(QStringLiteral("preset"), job.format == QStringLiteral("GIF")
             ? job.gifPreset : job.mp4Preset);
         result.append(item);
@@ -149,19 +150,19 @@ ExportQueueController::Job *ExportQueueController::findJob(int id)
 }
 
 bool ExportQueueController::queueMp4(const QString &source, double start, double end,
-                                     const QUrl &destination, double speed, bool muteAudio)
+                                     const QUrl &destination, double speed, int audioVolumePercent)
 {
-    return enqueue(source, start, end, destination, speed, muteAudio, false);
+    return enqueue(source, start, end, destination, speed, audioVolumePercent, false);
 }
 
 bool ExportQueueController::queueGif(const QString &source, double start, double end,
                                      const QUrl &destination, double speed)
 {
-    return enqueue(source, start, end, destination, speed, true, true);
+    return enqueue(source, start, end, destination, speed, 0, true);
 }
 
 bool ExportQueueController::enqueue(const QString &source, double start, double end,
-                                    const QUrl &destination, double speed, bool mute, bool gif)
+                                    const QUrl &destination, double speed, int audioVolumePercent, bool gif)
 {
     m_lastError.clear();
     auto reject = [this](const QString &error) {
@@ -181,7 +182,8 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
     if (!QFileInfo(output.absolutePath()).isDir() || !QFileInfo(output.absolutePath()).isWritable())
         return reject(QStringLiteral("The output folder is not writable."));
     if (!std::isfinite(start) || !std::isfinite(end) || start < 0 ||
-        end - start < 0.1 || !std::isfinite(speed) || speed < 0.25 || speed > 2.0)
+        end - start < 0.1 || !std::isfinite(speed) || speed < 0.25 || speed > 2.0 ||
+        audioVolumePercent < 0 || audioVolumePercent > 100)
         return reject(QStringLiteral("Choose a valid trim range and a speed from 0.25x to 2x."));
     if (output.suffix().compare(gif ? QStringLiteral("gif") :
                                 QStringLiteral("mp4"), Qt::CaseInsensitive) != 0)
@@ -198,7 +200,7 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
     job.start = start;
     job.end = end;
     job.speed = speed;
-    job.mute = mute;
+    job.audioVolumePercent = audioVolumePercent;
     job.sourceSize = input.size();
     job.sourceModified = input.lastModified();
     job.mp4Preset = m_settings->encodingPreset();
@@ -244,7 +246,7 @@ void ExportQueueController::startNext()
             ? m_worker->startGif(job.source, job.start, job.end,
                   QUrl::fromLocalFile(job.output), job.speed, job.gifPreset)
             : m_worker->startTrim(job.source, job.start, job.end,
-                  QUrl::fromLocalFile(job.output), job.speed, job.mute, job.mp4Preset);
+                  QUrl::fromLocalFile(job.output), job.speed, job.audioVolumePercent, job.mp4Preset);
         if (!started || !m_worker->busy())
             finishActive(false, m_worker->error());
         return;

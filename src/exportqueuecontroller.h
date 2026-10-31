@@ -31,7 +31,7 @@ public:
 
     Q_INVOKABLE QUrl suggestedOutputUrl(const QString &source, bool gif) const;
     Q_INVOKABLE bool queueMp4(const QString &source, double start, double end,
-                             const QUrl &destination, double speed, bool muteAudio);
+                             const QUrl &destination, double speed, int audioVolumePercent);
     Q_INVOKABLE bool queueGif(const QString &source, double start, double end,
                              const QUrl &destination, double speed);
     Q_INVOKABLE void cancelJob(int id);
@@ -56,12 +56,12 @@ private:
         double progress = 0.0;
         qint64 sourceSize = 0;
         QDateTime sourceModified;
-        bool mute = false;
+        int audioVolumePercent = 100;
         bool cancelRequested = false;
     };
 
     bool enqueue(const QString &source, double start, double end,
-                 const QUrl &destination, double speed, bool mute, bool gif);
+                 const QUrl &destination, double speed, int audioVolumePercent, bool gif);
     bool isReserved(const QString &output) const;
     Job *findJob(int id);
     void scheduleNext();

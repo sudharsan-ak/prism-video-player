@@ -35,10 +35,10 @@ public:
     Q_INVOKABLE QUrl suggestedGifOutputUrl(const QString &sourcePath) const;
     Q_INVOKABLE bool startTrim(const QString &sourcePath, double startSeconds,
                               double endSeconds, const QUrl &destination,
-                              double playbackSpeed = 1.0, bool muteAudio = false,
+                              double playbackSpeed = 1.0, int audioVolumePercent = 100,
                               const QString &encodingPreset = QString());
     Q_INVOKABLE bool startReplaceTrim(const QString &sourcePath, double startSeconds, double endSeconds,
-                                       double playbackSpeed = 1.0, bool muteAudio = false);
+                                       double playbackSpeed = 1.0, int audioVolumePercent = 100);
     Q_INVOKABLE bool startGif(const QString &sourcePath, double startSeconds,
                              double endSeconds, const QUrl &destination,
                              double playbackSpeed = 1.0,
@@ -59,7 +59,7 @@ private:
     void finished(int exitCode, QProcess::ExitStatus exitStatus);
     bool beginTrim(const QString &sourcePath, double startSeconds, double endSeconds,
                    const QUrl &destination, bool replaceOriginal, double playbackSpeed,
-                   bool muteAudio, bool animatedGif, const QString &encodingPreset,
+                   int audioVolumePercent, bool animatedGif, const QString &encodingPreset,
                    const QString &gifQuality);
     void finalizeReplacement(int attempt);
     void saveFallbackCopy(const QString &reason);

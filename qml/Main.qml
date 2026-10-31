@@ -43,18 +43,28 @@ ApplicationWindow {
     property bool previewSelectionPlaying: false
     property real editSpeed: 1.0
     property real normalPlaybackSpeed: 1.0
-    property bool editMuted: false
+    property int editVolumePercent: 100
+    property int lastEditAudibleVolume: 100
+    property int normalPlaybackVolume: 80
     property bool normalMuted: false
 
-    function setEditMuted(muted) {
-        editMuted = muted;
-        if (videoSurface.mpv)
-            videoSurface.mpv.setProperty("mute", muted);
+    function setEditVolume(percent) {
+        const value = Math.max(0, Math.min(100, Math.round(percent)));
+        editVolumePercent = value;
+        if (value > 0)
+            lastEditAudibleVolume = value;
+        // Do not persist the normal player's saved volume.
+        if (videoSurface.mpv) {
+            videoSurface.mpv.setProperty("volume", value);
+            videoSurface.mpv.setProperty("mute", value === 0);
+        }
     }
 
     function restorePlaybackAudio() {
-        if (videoSurface.mpv)
+        if (videoSurface.mpv) {
+            videoSurface.mpv.setProperty("volume", normalPlaybackVolume);
             videoSurface.mpv.setProperty("mute", normalMuted);
+        }
     }
 
 
@@ -93,7 +103,9 @@ ApplicationWindow {
         normalPlaybackSpeed = mpv.speed;
         const originalMute = String(mpv.getProperty("mute")).toLowerCase();
         normalMuted = originalMute === "yes" || originalMute === "true" || originalMute === "1";
-        setEditMuted(false); // Keep audio in MP4 exports by default.
+        normalPlaybackVolume = mpv.volume;
+        lastEditAudibleVolume = 100;
+        setEditVolume(100); // Default to original source gain.
         editSpeed = 1.0;
         playerController.setSpeed(1.0);
         editSourcePath = mpv.mediaPath;
@@ -138,7 +150,7 @@ ApplicationWindow {
             ? exportQueue.queueGif(editSourcePath, editStart, editEnd,
                                    destination, editSpeed)
             : exportQueue.queueMp4(editSourcePath, editStart, editEnd,
-                                   destination, editSpeed, editMuted);
+                                   destination, editSpeed, editVolumePercent);
         if (!ok) {
             toast.show(exportQueue.lastError, true);
             return;
@@ -330,8 +342,9 @@ ApplicationWindow {
                     startTime: prismWindow.editStart
                     endTime: prismWindow.editEnd
                     editSpeed: prismWindow.editSpeed
-                    muteAudio: prismWindow.editMuted
-                    onAudioMutedEdited: function(muted) { prismWindow.setEditMuted(muted); }
+                    audioVolumePercent: prismWindow.editVolumePercent
+                    lastAudibleVolume: prismWindow.lastEditAudibleVolume
+                    onAudioVolumeEdited: function(percent) { prismWindow.setEditVolume(percent); }
                     previewPlaying: prismWindow.previewSelectionPlaying &&
                         videoSurface.mpv && !videoSurface.mpv.paused
                     onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
@@ -396,7 +409,7 @@ ApplicationWindow {
                 endTime: prismWindow.editEnd
                 duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
                 editSpeed: prismWindow.editSpeed
-                muteAudio: prismWindow.editMuted
+                audioVolumePercent: prismWindow.editVolumePercent
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
@@ -618,7 +631,7 @@ ApplicationWindow {
                                                    prismWindow.editStart,
                                                    prismWindow.editEnd,
                                                    prismWindow.editSpeed,
-                                                   prismWindow.editMuted);
+                                                   prismWindow.editVolumePercent);
         }
         background: Rectangle {
             radius: 12
@@ -635,9 +648,12 @@ ApplicationWindow {
                 + (settingsStore.keepBackupOnReplace
                     ? "A timestamped backup will be kept beside it.\n\n"
                     : "No backup will be kept. This cannot be undone.\n\n")
-                + (prismWindow.editMuted
-                    ? "Audio is MUTED and will be removed from the exported MP4. "
-                    : "The trimmed MP4 will include the first audio track. ")
+                + (prismWindow.editVolumePercent === 0
+                    ? "Audio will be REMOVED from the exported MP4. "
+                    : prismWindow.editVolumePercent === 100
+                        ? "The first audio track keeps its original level. "
+                        : "The first audio track will be exported at " +
+                          prismWindow.editVolumePercent + "% of the source level. ")
                 + "Other audio tracks and subtitles will NOT be preserved.\n\n"
                 + "Choose Export edited copy instead if you want to keep the original untouched."
         }
@@ -652,7 +668,7 @@ ApplicationWindow {
         onAccepted: {
             if (!exportQueue.queueMp4(prismWindow.editSourcePath,
                                       prismWindow.editStart, prismWindow.editEnd,
-                                      selectedFile, prismWindow.editSpeed, prismWindow.editMuted))
+                                      selectedFile, prismWindow.editSpeed, prismWindow.editVolumePercent))
                 toast.show(exportQueue.lastError, true);
             else
                 toast.show("MP4 added to export queue.", false);

@@ -97,19 +97,19 @@ QUrl VideoExportController::suggestedGifOutputUrl(const QString &sourcePath) con
 
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
-                                      double playbackSpeed, bool muteAudio,
+                                      double playbackSpeed, int audioVolumePercent,
                                       const QString &encodingPreset)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, muteAudio, false, encodingPreset, QString());
+                     false, playbackSpeed, audioVolumePercent, false, encodingPreset, QString());
 }
 
 bool VideoExportController::startReplaceTrim(const QString &sourcePath,
                                             double startSeconds, double endSeconds,
-                                            double playbackSpeed, bool muteAudio)
+                                            double playbackSpeed, int audioVolumePercent)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds,
-                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed, muteAudio,
+                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed, audioVolumePercent,
                      false, QString(), QString());
 }
 
@@ -118,18 +118,22 @@ bool VideoExportController::startGif(const QString &sourcePath, double startSeco
                                      double playbackSpeed, const QString &gifQuality)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, true, true, QString(), gifQuality);
+                     false, playbackSpeed, 0, true, QString(), gifQuality);
 }
 
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
                                       bool replaceOriginal, double playbackSpeed,
-                                      bool muteAudio, bool animatedGif,
+                                      int audioVolumePercent, bool animatedGif,
                                       const QString &encodingPreset,
                                       const QString &gifQuality)
 {
     if (m_busy)
         return false;
+    if (audioVolumePercent < 0 || audioVolumePercent > 100) {
+        fail(QStringLiteral("Audio volume must be between 0% and 100%."));
+        return false;
+    }
 
     m_error.clear();
     m_lastOutput = {};
@@ -231,9 +235,14 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     // is sourceDuration / playbackSpeed. Pass argv directly, no shell.
     const QString speed = QString::number(playbackSpeed, 'f', 3);
     const QString videoFilter = QStringLiteral("setpts=(PTS-STARTPTS)/") + speed;
-    const QString audioFilter = playbackSpeed < 0.5
+    const QString tempoFilter = playbackSpeed < 0.5
         ? QStringLiteral("atempo=0.5,atempo=") + QString::number(playbackSpeed / 0.5, 'f', 3)
         : QStringLiteral("atempo=") + speed;
+    // Audio volume is a property of the exported file, not the current
+    // Windows or Prism playback volume. At 100% leave source gain alone.
+    const QString audioFilter = audioVolumePercent == 100 ? tempoFilter
+        : tempoFilter + QStringLiteral(",volume=") +
+          QString::number(audioVolumePercent / 100.0, 'f', 2);
     QStringList args = {
         QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
@@ -271,7 +280,7 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
              << QStringLiteral("-f") << QStringLiteral("gif");
     } else {
         args << QStringLiteral("-map") << QStringLiteral("0:V:0");
-        if (muteAudio) {
+        if (audioVolumePercent == 0) {
             // No audio stream is encoded, not just a stream of silence.
             args << QStringLiteral("-an");
         } else {

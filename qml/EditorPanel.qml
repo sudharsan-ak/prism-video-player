@@ -23,7 +23,7 @@ Rectangle {
     property real endTime: 0
     property real duration: 0
     property real editSpeed: 1.0
-    property bool muteAudio: false
+    property int audioVolumePercent: 100
     readonly property var presetIds: ["ultrafast", "veryfast", "fast", "medium", "slow"]
     function presetLabel(id) {
         const names = ["Ultrafast", "Very Fast", "Fast", "Medium", "Slow"];
@@ -263,7 +263,9 @@ Rectangle {
                 text: "Output: MP4 (H.264 + AAC)\n"
                     + "Edited duration: " + root.timeText((root.endTime - root.startTime)
                         / Math.max(0.25, root.editSpeed)) + "\n"
-                    + "MP4 audio: " + (root.muteAudio ? "Removed" : "First audio track") + "\n"
+                    + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
+                       root.audioVolumePercent === 100 ? "Original level" :
+                       root.audioVolumePercent + "% of original") + "\n"
                     + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
                     + "\nSubtitles not included"
                 lineHeight: 1.45

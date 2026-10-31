@@ -94,7 +94,9 @@ Rectangle {
                                     font.bold: true
                                 }
                                 Text {
-                                    text: jobCard.modelData.format + " · " + jobCard.modelData.speed + "x"
+                                    text: jobCard.modelData.format + " · " + jobCard.modelData.speed + "x" +
+                                        (jobCard.modelData.format === "MP4"
+                                            ? " · " + jobCard.modelData.audioVolume + "% audio" : "")
                                     color: root.tokens.textSecondary || "#aaa"
                                     font.pixelSize: 10
                                 }

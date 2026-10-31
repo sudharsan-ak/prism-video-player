@@ -19,7 +19,12 @@ Rectangle {
     property real endTime: 0
     property real editSpeed: 1.0
     property bool previewPlaying: false
-    property bool muteAudio: false
+    property int audioVolumePercent: 100
+    property int lastAudibleVolume: 100
+    onVisibleChanged: {
+        if (!visible)
+            audioVolumePopup.close();
+    }
     property bool sourceIsMp4: false
 
     signal startTimeEdited(real seconds)
@@ -31,7 +36,7 @@ Rectangle {
     signal previewRequested()
     signal togglePlaybackRequested()
     signal speedEdited(real speed)
-    signal audioMutedEdited(bool muted)
+    signal audioVolumeEdited(int percent)
     signal resetRequested()
     signal exportRequested()
 
@@ -380,14 +385,29 @@ Rectangle {
                     }
                 }
             }
-            TrimButton {
-                text: root.muteAudio ? "🔇 Muted" : "🔊 Sound on"
-                onClicked: root.audioMutedEdited(!root.muteAudio)
-                ToolTip.visible: hovered
-                ToolTip.text: root.muteAudio
-                    ? "Enable preview sound and include audio in MP4 exports"
-                    : "Mute preview and remove audio from exported MP4"
-                ToolTip.delay: 400
+            RowLayout {
+                spacing: 2
+                TrimButton {
+                    id: editSoundButton
+                    text: root.audioVolumePercent === 0 ? "🔇 Muted" :
+                          root.audioVolumePercent === 100 ? "🔊 Sound on" :
+                          "🔊 " + root.audioVolumePercent + "%"
+                    onClicked: root.audioVolumeEdited(
+                        root.audioVolumePercent === 0 ? root.lastAudibleVolume : 0)
+                    ToolTip.visible: hovered
+                    ToolTip.text: root.audioVolumePercent === 0
+                        ? "Restore previous volume"
+                        : "Mute preview and remove audio from exported MP4"
+                    ToolTip.delay: 400
+                }
+                TrimButton {
+                    id: audioSettingsButton
+                    text: "▾"
+                    onClicked: root.showAudioVolumePopup()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Adjust MP4 export audio volume"
+                    ToolTip.delay: 400
+                }
             }
             TrimButton {
                 text: "Set IN"
@@ -413,4 +433,128 @@ Rectangle {
             }
         }
     }
+    function showAudioVolumePopup() {
+        const pt = audioSettingsButton.mapToItem(audioVolumePopup.parent, 0, 0);
+        audioVolumePopup.x = Math.max(8, Math.min(
+            pt.x + audioSettingsButton.width - audioVolumePopup.width,
+            prismWindow.width - audioVolumePopup.width - 8));
+        audioVolumePopup.y = Math.max(8, pt.y - audioVolumePopup.height - 8);
+        audioVolumePopup.open();
+    }
+
+    Popup {
+        id: audioVolumePopup
+        parent: Overlay.overlay
+        width: 274
+        height: 216
+        padding: 13
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 11
+            color: root.tokens.panelGlassStrong || "#141A16"
+            border.color: root.tokens.accentSolid || "#32E77E"
+            border.width: 1
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: "Export audio volume"
+                    color: root.tokens.textPrimary || "#fff"
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+                Text {
+                    text: root.audioVolumePercent + "%"
+                    color: root.tokens.accentSolid || "#32E77E"
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+            }
+            Slider {
+                id: audioVolumeSlider
+                Layout.fillWidth: true
+                from: 0
+                to: 100
+                stepSize: 5
+                value: root.audioVolumePercent
+                onMoved: root.audioVolumeEdited(Math.round(value))
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "Muted"
+                    font.pixelSize: 10
+                    color: root.tokens.textMuted || "#888"
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: "Original volume"
+                    font.pixelSize: 10
+                    color: root.tokens.textMuted || "#888"
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                Repeater {
+                    model: [25, 50, 75, 100]
+                    Button {
+                        required property int modelData
+                        Layout.fillWidth: true
+                        text: modelData + "%"
+                        font.pixelSize: 10
+                        onClicked: root.audioVolumeEdited(modelData)
+                        background: Rectangle {
+                            radius: 6
+                            color: root.audioVolumePercent === modelData
+                                ? (root.tokens.accentTint || "#193826")
+                                : (root.tokens.panelGlass || "#252B28")
+                            border.width: 1
+                            border.color: root.audioVolumePercent === modelData
+                                ? (root.tokens.accentSolid || "#32E77E")
+                                : (root.tokens.panelBorder || "#444")
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: root.tokens.textPrimary || "#fff"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: root.audioVolumePercent === 0
+                    ? "Audio removed from exported MP4."
+                    : root.audioVolumePercent === 100
+                        ? "Original audio level preserved."
+                        : "MP4 audio exported at " + root.audioVolumePercent + "% of source."
+                wrapMode: Text.WordWrap
+                color: root.tokens.textSecondary || "#aaa"
+                font.pixelSize: 10
+            }
+            Button {
+                Layout.alignment: Qt.AlignRight
+                text: "Reset to 100%"
+                flat: true
+                font.pixelSize: 10
+                onClicked: root.audioVolumeEdited(100)
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.accentSolid || "#32E77E"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+        }
+    }
+
 }

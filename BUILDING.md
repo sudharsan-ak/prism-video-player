@@ -250,3 +250,27 @@ content; fine detail and motion may be reduced on Balanced/Compact.
   relaunch, MP4 replacement protection while queue busy, auto naming
   and manual Save As; move selection near both boundaries and resize
   handles separately; verify every Prism theme.
+
+## Volume control for trimmed MP4s
+
+- The Edit timeline speaker button still instantly toggles mute.
+  The small adjacent arrow opens a compact 0–100% volume popup, with
+  25%, 50%, 75% and 100% presets plus Reset to 100%.
+- Muting remembers the previous nonzero edit volume. Unmuting restores
+  that level (e.g. 40% → 0% → 40%). Every new editing session defaults
+  to 100% of original audio gain.
+- Live preview uses mpv volume/mute directly and does **not** change the
+  normal player volume saved in Prism settings. Leaving Edit, switching
+  media or replacing the original restores the prior playback volume
+  and mute state.
+- MP4 exports at 100% retain the source gain. Exports at 1–99% use
+  FFmpeg's `volume` filter after the existing `atempo` audio-speed
+  filter. At 0%, the entire audio stream is omitted (no silent AAC
+  stream). This works with Copy, Save As and Replace Original.
+- Every queued MP4 job captures its own volume percentage when added.
+  Later slider changes do not affect already queued jobs. The sidebar
+  and queue display show the selected level. GIF exports remain silent.
+- Windows acceptance: try 0/25/40/75/100%, mute/unmute restoration at
+  40%, ordinary player volume restoration, queue several MP4 exports
+  with different audio levels, test speed-adjusted exports and
+  replacement on a disposable MP4, and check the popup in all themes.
