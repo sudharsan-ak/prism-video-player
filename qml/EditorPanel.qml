@@ -125,8 +125,12 @@ Rectangle {
         const pt = settingsButton.mapToItem(overlay, 0, 0);
         exportModePopup.x = Math.max(8, Math.min(pt.x + settingsButton.width - exportModePopup.width,
                                                prismWindow.width - exportModePopup.width - 8));
-        exportModePopup.y = Math.max(8, Math.min(pt.y + settingsButton.height + 6,
-                                               prismWindow.height - exportModePopup.height - 8));
+        const below = pt.y + settingsButton.height + 6;
+        const above = pt.y - exportModePopup.height - 8;
+        // The gear is pinned to the bottom; keep its menu above it
+        // rather than covering the dock or extending off-screen.
+        exportModePopup.y = below + exportModePopup.height <= prismWindow.height - 8
+            ? below : Math.max(8, above);
         exportModePopup.open();
     }
 
@@ -142,116 +146,151 @@ Rectangle {
             : base;
     }
 
-    ScrollView {
+    ColumnLayout {
         anchors.fill: parent
-        contentWidth: availableWidth
-        clip: true
-        ColumnLayout {
-            width: parent.width
-            spacing: 14
+        spacing: 0
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 20
-                Text {
-                    Layout.fillWidth: true
-                    text: "EDIT VIDEO"
-                    color: root.tokens.textPrimary || "white"
-                    font.pixelSize: 13
-                    font.bold: true
-                }
-                Button {
-                    text: "✕"
-                    enabled: exportQueue.canQueue
-                    flat: true
-                    onClicked: root.closeRequested()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Return to player"
-                }
-            }
-
+        // The header and export dock never scroll.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 47
+            Layout.leftMargin: 15
+            Layout.rightMargin: 9
+            spacing: 8
             Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                text: root.sourceTitle
-                elide: Text.ElideMiddle
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.preferredHeight: 102
-                radius: 10
-                color: root.tokens.accentTint || "#223344"
-                border.color: root.tokens.accentSolid || "#A89BFF"
-                border.width: 1
-
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 7
-                    Text {
-                        text: "✂   Trim"
-                        color: root.tokens.textPrimary || "white"
-                        font.pixelSize: 13
-                        font.bold: true
-                    }
-                    Text {
-                        width: parent.width
-                        wrapMode: Text.WordWrap
-                        text: "Choose your IN and OUT points on the timeline below."
-                        color: root.tokens.textSecondary || "#ddd"
-                        font.pixelSize: 11
-                    }
-                    Text {
-                        text: root.timeText(root.endTime - root.startTime) + " selected"
-                        color: root.tokens.accentSolid || "#A89BFF"
-                        font.pixelSize: 11
-                        font.bold: true
-                    }
-                }
-            }
-
-            CropControls {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                tokens: root.tokens
-                cropActive: root.cropActive
-                cropX: root.cropX
-                cropY: root.cropY
-                cropWidth: root.cropWidth
-                cropHeight: root.cropHeight
-                quarterTurns: root.quarterTurns
-                onCropModeToggled: root.cropModeToggled()
-                onCropResetRequested: root.cropResetRequested()
-                onCropPresetRequested: function(preset) { root.cropPresetRequested(preset); }
-                onRotationRequested: function(turns) { root.rotationRequested(turns); }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.preferredHeight: 1
-                color: root.tokens.panelBorder || "#444"
-            }
-
-            Text {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                text: "EXPORT SUMMARY"
-                font.pixelSize: 10
+                text: "EDIT VIDEO"
+                color: root.tokens.textPrimary || "white"
+                font.pixelSize: 13
                 font.bold: true
-                color: root.tokens.textMuted || "#999"
             }
+            Button {
+                id: closeEditorButton
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                text: "✕"
+                enabled: exportQueue.canQueue
+                onClicked: root.closeRequested()
+                background: Rectangle {
+                    radius: 6
+                    color: closeEditorButton.hovered
+                        ? (root.tokens.accentTint || "#254233") : "transparent"
+                }
+                contentItem: Text {
+                    text: closeEditorButton.text
+                    color: root.tokens.textPrimary || "white"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                ToolTip.visible: hovered
+                ToolTip.text: "Return to player"
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 15
+            Layout.rightMargin: 15
+            Layout.bottomMargin: 9
+            text: root.sourceTitle
+            elide: Text.ElideMiddle
+            color: root.tokens.textSecondary || "#aaa"
+            font.pixelSize: 10
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: root.tokens.panelBorder || "#444"
+        }
+
+        // Only edit details scroll. Each group can be collapsed without
+        // resetting selected crop/rotation, encoding settings or queue jobs.
+        ScrollView {
+            id: editScroll
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+            ColumnLayout {
+                width: editScroll.availableWidth
+                spacing: 2
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Trim"
+                    subtitleText: root.timeText(root.endTime - root.startTime) + " selected"
+                    expanded: false
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 10
+                        Layout.rightMargin: 10
+                        Layout.bottomMargin: 6
+                        text: "Set IN and OUT points or drag the selected range in the timeline below."
+                        wrapMode: Text.WordWrap
+                        color: root.tokens.textSecondary || "#AAA"
+                        font.pixelSize: 11
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Crop"
+                    subtitleText: root.isCropped
+                        ? Math.round(root.cropWidth * 100) + "% × " +
+                          Math.round(root.cropHeight * 100) + "%" : "Full frame"
+                    expanded: true
+
+                    CropControls {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 7
+                        Layout.rightMargin: 7
+                        Layout.bottomMargin: 8
+                        tokens: root.tokens
+                        cropActive: root.cropActive
+                        cropX: root.cropX
+                        cropY: root.cropY
+                        cropWidth: root.cropWidth
+                        cropHeight: root.cropHeight
+                        quarterTurns: root.quarterTurns
+                        onCropModeToggled: root.cropModeToggled()
+                        onCropResetRequested: root.cropResetRequested()
+                        onCropPresetRequested: function(preset) { root.cropPresetRequested(preset); }
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Rotate"
+                    subtitleText: root.quarterTurns * 90 + "°"
+                    expanded: false
+                    RotateControls {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 7
+                        Layout.rightMargin: 7
+                        Layout.bottomMargin: 8
+                        tokens: root.tokens
+                        quarterTurns: root.quarterTurns
+                        onRotationRequested: function(turns) { root.rotationRequested(turns); }
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Export Summary"
+                    subtitleText: root.timeText(
+                        (root.endTime - root.startTime) / Math.max(0.25, root.editSpeed))
+                    expanded: false
             Text {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
@@ -275,6 +314,16 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
+
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Export Settings"
+                    subtitleText: root.presetLabel(settingsStore.encodingPreset)
+                    expanded: false
             Text {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
@@ -383,14 +432,97 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
-            Text {
+
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "Export Queue"
+                    subtitleText: exportQueue.waitingCount + " waiting"
+                    expanded: false
+            ExportQueuePanel {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                text: "QUICK EXPORT"
-                font.pixelSize: 10
-                font.bold: true
-                color: root.tokens.textMuted || "#999"
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                Layout.preferredHeight: Math.min(310, Math.max(130,
+                    65 + Math.min(exportQueue.jobs.length, 3) * 80))
+                visible: exportQueue.jobs.length > 0
+                compact: true
+            }
+            Button {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                text: "View export queue"
+                onClicked: root.queueRequested()
+                font.pixelSize: 11
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.accentSolid || "#A89BFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 7
+                    color: root.tokens.panelGlassStrong || "#242331"
+                    border.color: root.tokens.panelBorder || "#444"
+                }
+            }
+
+
+                }
+                Item { Layout.preferredHeight: 10 }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: root.tokens.panelBorder || "#444"
+        }
+
+        // Permanently visible export actions, outside editScroll.
+        ColumnLayout {
+            id: stickyExportDock
+            Layout.fillWidth: true
+            spacing: 6
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 15
+                Layout.rightMargin: 15
+                Layout.topMargin: 11
+                Text {
+                    Layout.fillWidth: true
+                    text: "QUICK EXPORT"
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: root.tokens.textMuted || "#999"
+                }
+                Button {
+                    id: queueShortcut
+                    text: "Queue (" + exportQueue.jobs.length + ")"
+                    font.pixelSize: 10
+                    flat: true
+                    onClicked: root.queueRequested()
+                    background: Rectangle {
+                        radius: 6
+                        color: queueShortcut.hovered
+                            ? (root.tokens.accentTint || "#203A29") : "transparent"
+                    }
+                    contentItem: Text {
+                        text: queueShortcut.text
+                        color: root.tokens.accentSolid || "#2BFA83"
+                        font: queueShortcut.font
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Open export queue"
+                }
             }
 
             Rectangle {
@@ -490,84 +622,46 @@ Rectangle {
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.preferredHeight: 55
-                radius: 8
-                color: root.tokens.panelGlassStrong || "#0B150E"
-                border.color: root.tokens.panelBorder || "#25412F"
 
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 6
-                    Text {
-                        text: "●  MP4   " + root.mp4ModeLabel()
-                        color: root.tokens.textSecondary || "#9DBBAC"
-                        font.pixelSize: 10
-                        elide: Text.ElideRight
-                        width: parent.width
-                    }
-                    Text {
-                        text: "●  GIF      " + root.gifModeLabel()
-                        color: root.tokens.textSecondary || "#9DBBAC"
-                        font.pixelSize: 10
-                        elide: Text.ElideRight
-                        width: parent.width
-                    }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                spacing: 4
+                Text {
+                    Layout.fillWidth: true
+                    text: "MP4: " + root.mp4ModeLabel()
+                    font.pixelSize: 10
+                    color: root.tokens.textSecondary || "#AAA"
+                    elide: Text.ElideRight
+                }
+                Text {
+                    text: "GIF: " + root.gifModeLabel()
+                    font.pixelSize: 10
+                    color: root.tokens.textSecondary || "#AAA"
+                    elide: Text.ElideRight
                 }
             }
 
             Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
+                Layout.leftMargin: 15
+                Layout.rightMargin: 15
                 visible: settingsStore.mp4ExportMode === "replace"
                 text: !root.canReplace
-                    ? "Replace original is available only for MP4 source files."
+                    ? "Replace original is only available for MP4."
                     : exportQueue.hasOutstanding
-                        ? "Replacement is available after the export queue finishes."
-                        : (settingsStore.keepBackupOnReplace
-                            ? "Backup ON. Original is preserved on replacement."
-                            : "Backup OFF. Replacing the original cannot be undone.")
-                color: root.tokens.textMuted || "#888"
+                        ? "Replacement waits until the export queue finishes."
+                        : settingsStore.keepBackupOnReplace
+                            ? "Backup ON for original replacement."
+                            : "Backup OFF: replacing cannot be undone."
+                color: root.tokens.textSecondary || "#AAA"
                 font.pixelSize: 10
                 wrapMode: Text.WordWrap
             }
 
-            ExportQueuePanel {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.preferredHeight: Math.min(310, Math.max(130,
-                    65 + Math.min(exportQueue.jobs.length, 3) * 80))
-                visible: exportQueue.jobs.length > 0
-                compact: true
-            }
-            Button {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                text: "View export queue"
-                onClicked: root.queueRequested()
-                font.pixelSize: 11
-                contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.accentSolid || "#A89BFF"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    radius: 7
-                    color: root.tokens.panelGlassStrong || "#242331"
-                    border.color: root.tokens.panelBorder || "#444"
-                }
-            }
-
-            Item { Layout.preferredHeight: 15 }
+            Item { Layout.preferredHeight: 9 }
         }
     }
     Popup {

@@ -18,7 +18,6 @@ ColumnLayout {
     signal cropModeToggled()
     signal cropResetRequested()
     signal cropPresetRequested(string preset)
-    signal rotationRequested(int quarterTurns)
 
     spacing: 8
 
@@ -122,51 +121,4 @@ ColumnLayout {
         wrapMode: Text.WordWrap
     }
 
-    Text {
-        Layout.topMargin: 7
-        text: "ROTATE"
-        font.pixelSize: 10
-        font.bold: true
-        color: root.tokens.textMuted || "#888"
-    }
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 4
-        Repeater {
-            model: [0, 90, 180, 270]
-            Button {
-                id: turn
-                required property int modelData
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                enabled: exportQueue.canQueue
-                text: modelData + "°"
-                font.pixelSize: 11
-                onClicked: root.rotationRequested(modelData / 90)
-                background: Rectangle {
-                    radius: 7
-                    color: root.quarterTurns * 90 === turn.modelData
-                        ? (root.tokens.accentTint || "#203A29")
-                        : (root.tokens.panelGlassStrong || "#242331")
-                    border.color: root.quarterTurns * 90 === turn.modelData
-                        ? (root.tokens.accentSolid || "#25EA78")
-                        : (root.tokens.panelBorder || "#444")
-                }
-                contentItem: Text {
-                    text: turn.text
-                    font: turn.font
-                    color: root.tokens.textPrimary || "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-    }
-    Text {
-        Layout.fillWidth: true
-        text: "Rotation is shown live and applied before cropping on export."
-        font.pixelSize: 10
-        color: root.tokens.textSecondary || "#AAA"
-        wrapMode: Text.WordWrap
-    }
 }
