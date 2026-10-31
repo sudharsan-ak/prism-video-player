@@ -16,12 +16,14 @@ Rectangle {
     property var mpv: null
     property bool libraryOpen: false
     property bool adjustmentsOpen: false
+    property bool editorActive: false
 
     signal libraryToggled()
     signal adjustmentsToggled()
     signal openFilesRequested()
     signal addFolderRequested()
     signal loadSubtitleRequested()
+    signal editRequested()
 
     // Native title bar is disabled (frameless window), so this bar must
     // provide its own drag-to-move. Sits below every other child so
