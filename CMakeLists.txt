@@ -28,6 +28,8 @@ qt_add_executable(Prism
     src/themecontroller.h
     src/videoexportcontroller.cpp
     src/videoexportcontroller.h
+    src/videothumbnailcontroller.cpp
+    src/videothumbnailcontroller.h
     resources/prism.rc
 )
 

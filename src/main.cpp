@@ -8,6 +8,7 @@
 #include "settingsstore.h"
 #include "themecontroller.h"
 #include "videoexportcontroller.h"
+#include "videothumbnailcontroller.h"
 
 int main(int argc, char *argv[])
 {
@@ -27,12 +28,14 @@ int main(int argc, char *argv[])
     ThemeController themeController(&settings);
     PlayerController playerController(&settings);
     VideoExportController videoExportController;
+    VideoThumbnailController videoThumbnailController;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("settingsStore", &settings);
     engine.rootContext()->setContextProperty("themeController", &themeController);
     engine.rootContext()->setContextProperty("playerController", &playerController);
     engine.rootContext()->setContextProperty("videoExportController", &videoExportController);
+    engine.rootContext()->setContextProperty("videoThumbnailController", &videoThumbnailController);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::warnings,

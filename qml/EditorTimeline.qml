@@ -74,7 +74,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 54
 
-            // A filmstrip preview is deferred; no repeated fake frames.
+            // Real thumbnail images are generated asynchronously by FFmpeg.
             Rectangle {
                 id: frameTrack
                 anchors.left: parent.left
@@ -90,17 +90,45 @@ Rectangle {
                     anchors.fill: parent
                     spacing: 0
                     Repeater {
-                        model: 24
-                        Rectangle {
-                            width: frameTrack.width / 24
+                        model: videoThumbnailController.frames.length > 0
+                            ? videoThumbnailController.frames : Array(16).fill("")
+                        Item {
+                            width: frameTrack.width / 16
                             height: frameTrack.height
-                            color: index % 2 === 0
-                                ? Qt.rgba(1, 1, 1, 0.035)
-                                : Qt.rgba(1, 1, 1, 0.065)
-                            border.width: 1
-                            border.color: root.tokens.panelBorder || "#34343A"
+                            clip: true
+                            Rectangle {
+                                anchors.fill: parent
+                                color: index % 2 === 0 ? "#24242E" : "#343441"
+                            }
+                            Image {
+                                anchors.fill: parent
+                                source: modelData
+                                fillMode: Image.PreserveAspectCrop
+                                cache: false
+                                asynchronous: true
+                                visible: status === Image.Ready
+                            }
+                            Rectangle {
+                                anchors.right: parent.right
+                                width: 1
+                                height: parent.height
+                                color: "#55000000"
+                            }
                         }
                     }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: videoThumbnailController.error.length > 0
+                    width: parent.width - 18
+                    text: videoThumbnailController.error
+                    font.pixelSize: 10
+                    color: "#FFFFFF"
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    style: Text.Outline
+                    styleColor: "#111111"
                 }
 
                 Rectangle {

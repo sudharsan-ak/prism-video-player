@@ -49,6 +49,7 @@ ApplicationWindow {
         libraryOpen = false;
         adjustmentsOpen = false;
         editMode = true;
+        videoThumbnailController.generate(editSourcePath, mpv.duration);
         globalShortcuts.forceActiveFocus();
     }
 
@@ -59,6 +60,7 @@ ApplicationWindow {
         }
         previewSelectionPlaying = false;
         editMode = false;
+        videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
     }
 
@@ -500,6 +502,7 @@ ApplicationWindow {
                 videoSurface.mpv.mediaPath !== prismWindow.editSourcePath) {
                 prismWindow.previewSelectionPlaying = false;
                 prismWindow.editMode = false;
+                videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);
             }
         }
