@@ -322,13 +322,13 @@ void VideoExportController::saveFallbackCopy(const QString &reason)
     if (QFileInfo::exists(output) || !QFile::rename(m_temporaryOutput, output)) {
         m_busy = false;
         m_replacePending = false;
-        m_error = reason + QStringLiteral(" Encoded video remains at: ") + m_temporaryOutput;
+        m_error = reason + QStringLiteral(" Inspect original and any backup. Encoded video remains at: ") + m_temporaryOutput;
         m_status.clear();
         emit stateChanged();
         return;
     }
     markCompleted(output, false);
-    m_status = QStringLiteral("Original unchanged. Edited copy saved instead.");
+    m_status = QStringLiteral("Replacement not confirmed. Edited copy saved; inspect original and backup.");
     m_error = reason;
     emit stateChanged();
 }

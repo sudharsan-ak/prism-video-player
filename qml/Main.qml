@@ -519,7 +519,7 @@ ApplicationWindow {
                 playerController.openFiles([prismWindow.editSourcePath]);
                 toast.show("Original replaced. Backup saved beside it.", false);
             } else if (videoExportController.error.length > 0) {
-                toast.show("Original unchanged. Edited copy saved.", false);
+                toast.show("Replacement not confirmed. Edited copy saved. Inspect original.", true);
             } else {
                 toast.show("Edited video saved successfully.", false);
             }
