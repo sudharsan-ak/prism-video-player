@@ -6,6 +6,10 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTimer>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 #include <QUuid>
 #include <QtGlobal>
 #include <cmath>
@@ -65,11 +69,29 @@ QUrl VideoExportController::suggestedOutputUrl(const QString &sourcePath) const
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination)
 {
+    return beginTrim(sourcePath, startSeconds, endSeconds, destination, false);
+}
+
+bool VideoExportController::startReplaceTrim(const QString &sourcePath,
+                                            double startSeconds, double endSeconds)
+{
+    return beginTrim(sourcePath, startSeconds, endSeconds,
+                     QUrl::fromLocalFile(sourcePath), true);
+}
+
+bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
+                                      double endSeconds, const QUrl &destination,
+                                      bool replaceOriginal)
+{
     if (m_busy)
         return false;
 
     m_error.clear();
     m_lastOutput = {};
+    m_backupPath.clear();
+    m_lastWasReplacement = false;
+    m_replacePending = false;
+    m_replaceOriginal = false;
     m_status.clear();
     emit stateChanged();
 
@@ -88,9 +110,16 @@ bool VideoExportController::startTrim(const QString &sourcePath, double startSec
         return false;
     }
     const QString inputCanonical = source.canonicalFilePath();
-    if (inputCanonical.compare(output.absoluteFilePath(), Qt::CaseInsensitive) == 0 ||
-        output.exists()) {
-        fail(QStringLiteral("Choose a new filename. Prism never overwrites existing videos."));
+    const bool sameFile = inputCanonical.compare(output.absoluteFilePath(), Qt::CaseInsensitive) == 0;
+    if (replaceOriginal) {
+        // Never put newly encoded MP4 data under a non-MP4 file extension.
+        if (!sameFile || source.isSymLink() ||
+            source.suffix().compare(QStringLiteral("mp4"), Qt::CaseInsensitive) != 0) {
+            fail(QStringLiteral("Replace original is supported only for ordinary local MP4 files."));
+            return false;
+        }
+    } else if (sameFile || output.exists()) {
+        fail(QStringLiteral("Choose a new filename. Copy export never overwrites existing files."));
         return false;
     }
     const QFileInfo folder(output.absolutePath());
@@ -108,6 +137,10 @@ bool VideoExportController::startTrim(const QString &sourcePath, double startSec
     // Render to a random same-directory temporary .mp4 and rename only on
     // success. FFmpeg never touches the input or the selected final path.
     m_pendingOutput = output.absoluteFilePath();
+    m_pendingSource = source.absoluteFilePath();
+    m_sourceSize = source.size();
+    m_sourceModified = source.lastModified();
+    m_replaceOriginal = replaceOriginal;
     m_temporaryOutput = QDir(output.absolutePath()).filePath(
         QStringLiteral(".prism-export-%1.mp4").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
     m_clipDuration = endSeconds - startSeconds;
@@ -116,7 +149,9 @@ bool VideoExportController::startTrim(const QString &sourcePath, double startSec
     m_lastStderr.clear();
     m_cancelRequested = false;
     m_busy = true;
-    m_status = QStringLiteral("Encoding trimmed clip...");
+    m_status = replaceOriginal
+        ? QStringLiteral("Encoding before safely replacing original...")
+        : QStringLiteral("Encoding trimmed copy...");
     emit progressChanged();
     emit stateChanged();
 
@@ -198,18 +233,104 @@ void VideoExportController::finished(int exitCode, QProcess::ExitStatus exitStat
                               : QStringLiteral("FFmpeg export failed: %1").arg(detail));
         return;
     }
+    if (m_replaceOriginal) {
+        m_replacePending = true;
+        m_status = QStringLiteral("Encoding complete. Releasing original video...");
+        emit stateChanged();
+        emit replacementPrepared();
+        return;
+    }
     if (QFileInfo::exists(m_pendingOutput) || !QFile::rename(m_temporaryOutput, m_pendingOutput)) {
         fail(QStringLiteral("Could not save the edited video. Check the folder and output name."));
         return;
     }
-    m_lastOutput = QUrl::fromLocalFile(m_pendingOutput);
+    markCompleted(m_pendingOutput, false);
+}
+
+
+void VideoExportController::markCompleted(const QString &outputPath, bool replaced)
+{
+    m_lastOutput = QUrl::fromLocalFile(outputPath);
+    m_lastWasReplacement = replaced;
     m_progress = 1.0;
     m_busy = false;
-    m_status = QStringLiteral("Export complete.");
+    m_replacePending = false;
+    m_status = replaced
+        ? QStringLiteral("Original replaced. A backup was kept beside it.")
+        : QStringLiteral("Edited MP4 saved.");
     m_error.clear();
+    m_temporaryOutput.clear();
     emit progressChanged();
     emit stateChanged();
     emit completed(m_lastOutput);
+}
+
+void VideoExportController::completeReplacement()
+{
+    if (!m_busy || !m_replacePending)
+        return;
+    // mpv's stop is asynchronous; wait for its input handle to close.
+    QTimer::singleShot(450, this, [this] { finalizeReplacement(0); });
+}
+
+void VideoExportController::finalizeReplacement(int attempt)
+{
+    if (!m_busy || !m_replacePending || m_cancelRequested)
+        return;
+    const QFileInfo source(m_pendingSource);
+    if (!source.isFile() || source.size() != m_sourceSize ||
+        source.lastModified() != m_sourceModified) {
+        saveFallbackCopy(QStringLiteral("The original changed during export."));
+        return;
+    }
+#ifdef Q_OS_WIN
+    if (m_backupPath.isEmpty()) {
+        const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+        const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+        m_backupPath = QDir(source.absolutePath()).filePath(
+            source.completeBaseName() + QStringLiteral("-prism-backup-") + stamp
+            + QStringLiteral("-") + id + QStringLiteral(".mp4"));
+    }
+    // Windows-native replace keeps a full backup in the source folder.
+    const BOOL ok = ReplaceFileW(
+        reinterpret_cast<LPCWSTR>(m_pendingSource.utf16()),
+        reinterpret_cast<LPCWSTR>(m_temporaryOutput.utf16()),
+        reinterpret_cast<LPCWSTR>(m_backupPath.utf16()),
+        REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr);
+    if (ok) {
+        markCompleted(m_pendingSource, true);
+        return;
+    }
+    const DWORD err = GetLastError();
+    if (attempt < 8) {
+        QTimer::singleShot(300, this, [this, attempt] { finalizeReplacement(attempt + 1); });
+        return;
+    }
+    saveFallbackCopy(QStringLiteral("Windows could not replace the original (error %1).")
+                     .arg(static_cast<qulonglong>(err)));
+#else
+    Q_UNUSED(attempt)
+    saveFallbackCopy(QStringLiteral("Replacing the original is supported only on Windows."));
+#endif
+}
+
+void VideoExportController::saveFallbackCopy(const QString &reason)
+{
+    // Preserve successful work if replacement is blocked; never remove
+    // an original or backup to make room for an output.
+    const QString output = suggestedOutputUrl(m_pendingSource).toLocalFile();
+    if (QFileInfo::exists(output) || !QFile::rename(m_temporaryOutput, output)) {
+        m_busy = false;
+        m_replacePending = false;
+        m_error = reason + QStringLiteral(" Encoded video remains at: ") + m_temporaryOutput;
+        m_status.clear();
+        emit stateChanged();
+        return;
+    }
+    markCompleted(output, false);
+    m_status = QStringLiteral("Original unchanged. Edited copy saved instead.");
+    m_error = reason;
+    emit stateChanged();
 }
 
 void VideoExportController::fail(const QString &message)
@@ -228,6 +349,15 @@ void VideoExportController::cancel()
     if (!m_busy || m_cancelRequested)
         return;
     m_cancelRequested = true;
+    if (m_replacePending) {
+        QFile::remove(m_temporaryOutput);
+        m_busy = false;
+        m_replacePending = false;
+        m_status = QStringLiteral("Replacement canceled. Original unchanged.");
+        m_error.clear();
+        emit stateChanged();
+        return;
+    }
     m_status = QStringLiteral("Canceling export...");
     emit stateChanged();
     m_process.kill();
