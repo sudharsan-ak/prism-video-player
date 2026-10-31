@@ -52,6 +52,8 @@ qt_add_qml_module(Prism
         qml/ContextMenu.qml
         qml/LibraryPanel.qml
         qml/AdjustmentsPanel.qml
+        qml/EditorPanel.qml
+        qml/EditorTimeline.qml
         qml/BottomControlBar.qml
         qml/FullscreenOverlay.qml
         qml/OsdOverlay.qml

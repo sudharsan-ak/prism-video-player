@@ -23,9 +23,67 @@ ApplicationWindow {
     property bool adjustmentsOpen: false
     property bool fullscreenMode: false
 
+    property bool editMode: false
+    property string editSourcePath: ""
+    property real editStart: 0
+    property real editEnd: 0
+    property bool previewSelectionPlaying: false
+
+    function beginEditing() {
+        const mpv = videoSurface.mpv;
+        if (!mpv || !mpv.mediaPath || mpv.videoWidth <= 0 || mpv.duration <= 0) {
+            toast.show("Open a video and wait for it to load before editing.", true);
+            return;
+        }
+        if (videoExportController.busy) {
+            toast.show("Finish or cancel the current export first.", true);
+            return;
+        }
+        if (fullscreenMode)
+            toggleFullscreen();
+        editSourcePath = mpv.mediaPath;
+        editStart = 0;
+        editEnd = mpv.duration;
+        previewSelectionPlaying = false;
+        playerController.setPaused(true);
+        libraryOpen = false;
+        adjustmentsOpen = false;
+        editMode = true;
+        globalShortcuts.forceActiveFocus();
+    }
+
+    function leaveEditing() {
+        if (videoExportController.busy) {
+            toast.show("Finish or cancel the current export first.", false);
+            return;
+        }
+        previewSelectionPlaying = false;
+        editMode = false;
+        globalShortcuts.forceActiveFocus();
+    }
+
+    function previewEditRange() {
+        if (!editMode || editEnd <= editStart)
+            return;
+        previewSelectionPlaying = true;
+        playerController.seek(editStart);
+        playerController.setPaused(false);
+    }
+
+    function openTrimSaveDialog() {
+        if (!editMode || videoExportController.busy)
+            return;
+        trimSaveDialog.selectedFile = videoExportController.suggestedOutputUrl(editSourcePath);
+        trimSaveDialog.open();
+    }
+
     color: "transparent"
 
     function toggleFullscreen() {
+        if (editMode) {
+            toast.show("Exit Edit mode before entering fullscreen.", false);
+            return;
+        }
         if (visibility === Window.FullScreen) {
             visibility = Window.Windowed;
             fullscreenMode = false;
@@ -84,6 +142,8 @@ ApplicationWindow {
             mpv: videoSurface.mpv
             libraryOpen: prismWindow.libraryOpen
             adjustmentsOpen: prismWindow.adjustmentsOpen
+            editorActive: prismWindow.editMode
+            onEditRequested: prismWindow.editMode ? prismWindow.leaveEditing() : prismWindow.beginEditing()
             onLibraryToggled: prismWindow.libraryOpen = !prismWindow.libraryOpen
             onAdjustmentsToggled: prismWindow.adjustmentsOpen = !prismWindow.adjustmentsOpen
             onOpenFilesRequested: openFilesDialog.open()
@@ -99,7 +159,7 @@ ApplicationWindow {
             LibraryPanel {
                 id: libraryPanel
                 Layout.fillHeight: true
-                visible: prismWindow.libraryOpen
+                visible: prismWindow.libraryOpen && !prismWindow.editMode
                 mpv: videoSurface.mpv
                 onAddFilesRequested: addToQueueDialog.open()
             }
@@ -139,16 +199,66 @@ ApplicationWindow {
                     id: bottomBar
                     Layout.fillWidth: true
                     Layout.preferredHeight: 92
+                    visible: !prismWindow.editMode
                     mpv: videoSurface.mpv
+                }
+
+                EditorTimeline {
+                    id: editorTimeline
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 200
+                    visible: prismWindow.editMode
+                    enabled: !videoExportController.busy
+                    duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
+                    position: videoSurface.mpv ? videoSurface.mpv.position : 0
+                    startTime: prismWindow.editStart
+                    endTime: prismWindow.editEnd
+                    onStartTimeEdited: function(seconds) {
+                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.editStart = Math.max(0, Math.min(seconds, prismWindow.editEnd - 0.1));
+                    }
+                    onEndTimeEdited: function(seconds) {
+                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.editEnd = Math.min(duration, Math.max(seconds, prismWindow.editStart + 0.1));
+                    }
+                    onSeekRequested: function(seconds) {
+                        prismWindow.previewSelectionPlaying = false;
+                        playerController.seek(seconds);
+                    }
+                    onPreviewRequested: prismWindow.previewEditRange()
+                    onResetRequested: {
+                        prismWindow.previewSelectionPlaying = false;
+                        prismWindow.editStart = 0;
+                        prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
+                    }
+                    onExportRequested: prismWindow.openTrimSaveDialog()
                 }
             }
 
             AdjustmentsPanel {
                 id: adjustmentsPanel
                 Layout.fillHeight: true
-                visible: prismWindow.adjustmentsOpen
+                visible: prismWindow.adjustmentsOpen && !prismWindow.editMode
                 mpv: videoSurface.mpv
                 onCloseRequested: prismWindow.adjustmentsOpen = false
+            }
+
+            EditorPanel {
+                id: editorPanel
+                Layout.fillHeight: true
+                Layout.preferredWidth: 288
+                visible: prismWindow.editMode
+                sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
+                startTime: prismWindow.editStart
+                endTime: prismWindow.editEnd
+                duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
+                onCloseRequested: prismWindow.leaveEditing()
+                onExportRequested: prismWindow.openTrimSaveDialog()
+                onPreviewRequested: prismWindow.previewEditRange()
+                onResetRequested: {
+                    prismWindow.editStart = 0;
+                    prismWindow.editEnd = videoSurface.mpv ? videoSurface.mpv.duration : 0;
+                }
             }
         }
     }
@@ -343,6 +453,27 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: trimSaveDialog
+        title: "Export trimmed video (new MP4)"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "mp4"
+        nameFilters: ["MP4 video (*.mp4)"]
+        onAccepted: {
+            videoExportController.startTrim(prismWindow.editSourcePath,
+                                             prismWindow.editStart,
+                                             prismWindow.editEnd,
+                                             selectedFile);
+        }
+    }
+
+    Connections {
+        target: videoExportController
+        function onCompleted(outputUrl) {
+            toast.show("Edited video saved successfully.", false);
+        }
+    }
+
+    FileDialog {
         id: subtitleDialog
         title: "Load subtitles"
         nameFilters: ["Subtitle files (*.srt *.ass *.ssa *.vtt *.sub *.idx *.smi)"]
@@ -353,6 +484,24 @@ ApplicationWindow {
         target: videoSurface.mpv
         function onVolumeChanged() {
             osd.show("Volume", videoSurface.mpv.volume, 100);
+        }
+        function onPositionChanged() {
+            if (!prismWindow.editMode || !prismWindow.previewSelectionPlaying)
+                return;
+            if (videoSurface.mpv.position >= prismWindow.editEnd - 0.05) {
+                prismWindow.previewSelectionPlaying = false;
+                playerController.setPaused(true);
+                playerController.seek(prismWindow.editEnd);
+            }
+        }
+        function onMediaPathChanged() {
+            // A new source makes the prior editing range meaningless.
+            if (prismWindow.editMode &&
+                videoSurface.mpv.mediaPath !== prismWindow.editSourcePath) {
+                prismWindow.previewSelectionPlaying = false;
+                prismWindow.editMode = false;
+                toast.show("Video changed. Edit session closed.", false);
+            }
         }
     }
 

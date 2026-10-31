@@ -99,6 +99,28 @@ Rectangle {
             menu: playbackMenu
             onMenuToggleRequested: playbackMenu.visible ? playbackMenu.close() : playbackMenu.open()
         }
+        Rectangle {
+            id: editEntry
+            height: 26
+            width: editLabel.implicitWidth + 16
+            radius: 6
+            anchors.verticalCenter: parent.verticalCenter
+            color: root.editorActive ? (root.tokens.accentTint || "#333") : "transparent"
+            Text {
+                id: editLabel
+                anchors.centerIn: parent
+                text: "Edit"
+                color: root.editorActive
+                    ? (root.tokens.accentSolid || "#A89BFF")
+                    : (root.tokens.textSecondary || "#888")
+                font.pixelSize: 11
+                font.weight: root.editorActive ? Font.DemiBold : Font.Normal
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.editRequested()
+            }
+        }
         TopMenuLabel {
             id: moreItem
             text: "Tools"

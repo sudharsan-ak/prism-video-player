@@ -1,0 +1,252 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+// Trim selection is independent of the playback seek bar: only the
+// range handles change the exported IN/OUT values. The red playhead
+// shows current mpv position; export cuts at the exact chosen times.
+Rectangle {
+    id: root
+    height: 175
+    color: tokens.panelGlass || "#20202B"
+    border.color: tokens.panelBorder || "transparent"
+    border.width: 1
+
+    property var tokens: themeController.tokens
+    property real duration: 0
+    property real position: 0
+    property real startTime: 0
+    property real endTime: 0
+
+    signal startTimeEdited(real seconds)
+    signal endTimeEdited(real seconds)
+    signal seekRequested(real seconds)
+    signal previewRequested()
+    signal resetRequested()
+    signal exportRequested()
+
+    function timeText(seconds) {
+        let whole = Math.max(0, Math.floor(seconds || 0));
+        const h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60);
+        const s = whole % 60;
+        const pad = n => String(n).padStart(2, "0");
+        return h ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.topMargin: 10
+        anchors.bottomMargin: 10
+        spacing: 5
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+            Text {
+                text: "TRIM TIMELINE"
+                color: root.tokens.textPrimary || "#fff"
+                font.pixelSize: 11
+                font.bold: true
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: "IN  " + root.timeText(root.startTime)
+                color: root.tokens.accentSolid || "#A89BFF"
+                font.pixelSize: 11
+                font.bold: true
+            }
+            Text {
+                text: "OUT  " + root.timeText(root.endTime)
+                color: root.tokens.textPrimary || "#fff"
+                font.pixelSize: 11
+                font.bold: true
+            }
+            Text {
+                text: "SELECTED  " + root.timeText(root.endTime - root.startTime)
+                color: root.tokens.textSecondary || "#aaa"
+                font.pixelSize: 11
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 54
+
+            // A filmstrip preview is deferred; no repeated fake frames.
+            Rectangle {
+                id: frameTrack
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: 36
+                radius: 7
+                color: root.tokens.videoCardBackground || "#111"
+                border.color: root.tokens.panelBorder || "#555"
+                clip: true
+
+                Row {
+                    anchors.fill: parent
+                    spacing: 0
+                    Repeater {
+                        model: 24
+                        Rectangle {
+                            width: frameTrack.width / 24
+                            height: frameTrack.height
+                            color: index % 2 === 0
+                                ? Qt.rgba(1, 1, 1, 0.035)
+                                : Qt.rgba(1, 1, 1, 0.065)
+                            border.width: 1
+                            border.color: root.tokens.panelBorder || "#34343A"
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: trimRange.first.visualPosition * parent.width
+                    width: Math.max(0, (trimRange.second.visualPosition - trimRange.first.visualPosition) * parent.width)
+                    height: parent.height
+                    color: root.tokens.accentTint || "#334466"
+                    border.color: root.tokens.accentSolid || "#A89BFF"
+                    border.width: 2
+                }
+                Rectangle {
+                    x: Math.max(0, Math.min(parent.width - 2,
+                        parent.width * root.position / Math.max(root.duration, 1)))
+                    height: parent.height
+                    width: 2
+                    color: "#F06B6B"
+                    z: 3
+                }
+            }
+
+            RangeSlider {
+                id: trimRange
+                anchors.fill: parent
+                from: 0
+                to: Math.max(root.duration, 1)
+                first.value: root.startTime
+                second.value: root.endTime
+                focusPolicy: Qt.NoFocus
+                live: true
+                first.onMoved: root.startTimeEdited(first.value)
+                second.onMoved: root.endTimeEdited(second.value)
+                first.onPressedChanged: {
+                    if (!first.pressed)
+                        root.seekRequested(root.startTime)
+                }
+                second.onPressedChanged: {
+                    if (!second.pressed)
+                        root.seekRequested(root.endTime)
+                }
+                background: Item {}
+                first.handle: Rectangle {
+                    width: 14; height: 46; radius: 4
+                    x: trimRange.leftPadding + trimRange.first.visualPosition * (trimRange.availableWidth - width)
+                    y: (trimRange.height - height) / 2
+                    color: root.tokens.accentSolid || "#A89BFF"
+                    border.width: 2
+                    border.color: root.tokens.seekThumbEdge || "#fff"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Ⅰ"
+                        font.pixelSize: 12
+                        color: root.tokens.videoCardBackground || "#111"
+                    }
+                }
+                second.handle: Rectangle {
+                    width: 14; height: 46; radius: 4
+                    x: trimRange.leftPadding + trimRange.second.visualPosition * (trimRange.availableWidth - width)
+                    y: (trimRange.height - height) / 2
+                    color: root.tokens.accentSolid || "#A89BFF"
+                    border.width: 2
+                    border.color: root.tokens.seekThumbEdge || "#fff"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Ⅱ"
+                        font.pixelSize: 12
+                        color: root.tokens.videoCardBackground || "#111"
+                    }
+                }
+            }
+        }
+
+        ThemedSeekBar {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 22
+            mediaPosition: root.position
+            mediaDuration: root.duration
+            onSeekRequested: function(seconds) { root.seekRequested(seconds); }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            Text {
+                text: "0:00"
+                font.pixelSize: 10
+                color: root.tokens.textMuted || "#888"
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: "Playhead: " + root.timeText(root.position)
+                font.pixelSize: 10
+                color: root.tokens.textSecondary || "#aaa"
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: root.timeText(root.duration)
+                font.pixelSize: 10
+                color: root.tokens.textMuted || "#888"
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            component TrimButton: Button {
+                font.pixelSize: 11
+                background: Rectangle {
+                    radius: 7
+                    color: parent.down
+                        ? (root.tokens.accentTint || "#334")
+                        : (root.tokens.panelGlassStrong || "#272735")
+                    border.width: 1
+                    border.color: root.tokens.panelBorder || "#444"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textPrimary || "#fff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            TrimButton {
+                text: "Set IN"
+                onClicked: root.startTimeEdited(Math.max(0, Math.min(root.position, root.endTime - 0.1)))
+            }
+            TrimButton {
+                text: "Set OUT"
+                onClicked: root.endTimeEdited(Math.min(root.duration, Math.max(root.position, root.startTime + 0.1)))
+            }
+            TrimButton {
+                text: "Preview selection"
+                onClicked: root.previewRequested()
+            }
+            TrimButton {
+                text: "Reset range"
+                onClicked: root.resetRequested()
+            }
+            Item { Layout.fillWidth: true }
+            TrimButton {
+                text: "Export..."
+                enabled: !videoExportController.busy
+                onClicked: root.exportRequested()
+            }
+        }
+    }
+}
