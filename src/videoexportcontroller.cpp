@@ -68,24 +68,47 @@ QUrl VideoExportController::suggestedOutputUrl(const QString &sourcePath) const
     return QUrl::fromLocalFile(path);
 }
 
+QUrl VideoExportController::suggestedGifOutputUrl(const QString &sourcePath) const
+{
+    const QFileInfo info(sourcePath);
+    const QString basename = info.completeBaseName().isEmpty()
+        ? QStringLiteral("Prism-video") : info.completeBaseName();
+    const QString folder = info.isFile() ? info.absolutePath()
+        : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    QString path = QDir(folder).filePath(basename + QStringLiteral("-trimmed.gif"));
+    for (int n = 2; QFileInfo::exists(path); ++n)
+        path = QDir(folder).filePath(basename + QStringLiteral("-trimmed-%1.gif").arg(n));
+    return QUrl::fromLocalFile(path);
+}
+
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
-                                      double playbackSpeed)
+                                      double playbackSpeed, bool muteAudio)
 {
-    return beginTrim(sourcePath, startSeconds, endSeconds, destination, false, playbackSpeed);
+    return beginTrim(sourcePath, startSeconds, endSeconds, destination,
+                     false, playbackSpeed, muteAudio, false);
 }
 
 bool VideoExportController::startReplaceTrim(const QString &sourcePath,
                                             double startSeconds, double endSeconds,
-                                            double playbackSpeed)
+                                            double playbackSpeed, bool muteAudio)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds,
-                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed);
+                     QUrl::fromLocalFile(sourcePath), true, playbackSpeed, muteAudio, false);
+}
+
+bool VideoExportController::startGif(const QString &sourcePath, double startSeconds,
+                                     double endSeconds, const QUrl &destination,
+                                     double playbackSpeed)
+{
+    return beginTrim(sourcePath, startSeconds, endSeconds, destination,
+                     false, playbackSpeed, true, true);
 }
 
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
-                                      bool replaceOriginal, double playbackSpeed)
+                                      bool replaceOriginal, double playbackSpeed,
+                                      bool muteAudio, bool animatedGif)
 {
     if (m_busy)
         return false;
@@ -102,10 +125,11 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     const QFileInfo source(sourcePath);
     const QString outputPath = QDir::cleanPath(destination.toLocalFile());
     const QFileInfo output(outputPath);
+    const QString extension = animatedGif ? QStringLiteral("gif") : QStringLiteral("mp4");
     if (!isLocalAbsolutePath(sourcePath) || !source.isFile() || !source.isReadable() ||
         !destination.isLocalFile() || !isLocalAbsolutePath(outputPath) ||
-        output.suffix().compare(QStringLiteral("mp4"), Qt::CaseInsensitive) != 0) {
-        fail(QStringLiteral("Choose an existing local video and a local .mp4 destination."));
+        output.suffix().compare(extension, Qt::CaseInsensitive) != 0) {
+        fail(QStringLiteral("Choose an existing local video and a new .%1 destination.").arg(extension));
         return false;
     }
     if (!std::isfinite(playbackSpeed) || playbackSpeed < 0.25 || playbackSpeed > 2.0) {
@@ -149,10 +173,12 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     m_sourceSize = source.size();
     m_sourceModified = source.lastModified();
     m_replaceOriginal = replaceOriginal;
+    m_exportingGif = animatedGif;
     m_playbackSpeed = playbackSpeed;
     m_keepBackupForJob = m_settings && m_settings->keepBackupOnReplace();
     m_temporaryOutput = QDir(output.absolutePath()).filePath(
-        QStringLiteral(".prism-export-%1.mp4").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        QStringLiteral(".prism-export-%1.%2")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces), extension));
     const double sourceDuration = endSeconds - startSeconds;
     m_clipDuration = sourceDuration / playbackSpeed;
     m_progress = 0.0;
@@ -160,22 +186,20 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     m_lastStderr.clear();
     m_cancelRequested = false;
     m_busy = true;
-    m_status = replaceOriginal
-        ? QStringLiteral("Encoding before safely replacing original...")
-        : QStringLiteral("Encoding trimmed copy...");
+    m_status = animatedGif ? QStringLiteral("Creating animated GIF...")
+        : replaceOriginal ? QStringLiteral("Encoding before safely replacing original...")
+                          : QStringLiteral("Encoding trimmed copy...");
     emit progressChanged();
     emit stateChanged();
 
-    // Accurate cuts and speed changes require re-encoding. Video PTS and
-    // audio tempo are adjusted together to keep A/V in sync. atempo
-    // supports 0.5..2.0 directly, so chain two 0.5 filters for 0.25x.
+    // Apply the source trim before transforming timestamps; output time
+    // is sourceDuration / playbackSpeed. Pass argv directly, no shell.
     const QString speed = QString::number(playbackSpeed, 'f', 3);
     const QString videoFilter = QStringLiteral("setpts=(PTS-STARTPTS)/") + speed;
     const QString audioFilter = playbackSpeed < 0.5
         ? QStringLiteral("atempo=0.5,atempo=") + QString::number(playbackSpeed / 0.5, 'f', 3)
         : QStringLiteral("atempo=") + speed;
-    // FFmpeg receives separate argv elements, never a shell command.
-    const QStringList args = {
+    QStringList args = {
         QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
         QStringLiteral("-stats_period"), QStringLiteral("0.25"),
@@ -183,20 +207,42 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral("-n"), QStringLiteral("-ss"), QString::number(startSeconds, 'f', 3),
         QStringLiteral("-t"), QString::number(sourceDuration, 'f', 3),
         QStringLiteral("-protocol_whitelist"), QStringLiteral("file,crypto,data"),
-        QStringLiteral("-i"), source.absoluteFilePath(),
-        QStringLiteral("-map"), QStringLiteral("0:V:0"),
-        QStringLiteral("-map"), QStringLiteral("0:a:0?"),
-        QStringLiteral("-c:v"), QStringLiteral("libx264"),
-        QStringLiteral("-preset"), m_settings ? m_settings->encodingPreset() : QStringLiteral("veryfast"),
-        QStringLiteral("-crf"), QStringLiteral("18"),
-        QStringLiteral("-vf"), videoFilter,
-        QStringLiteral("-af"), audioFilter,
-        QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
-        QStringLiteral("-c:a"), QStringLiteral("aac"),
-        QStringLiteral("-b:a"), QStringLiteral("192k"),
-        QStringLiteral("-movflags"), QStringLiteral("+faststart"),
-        QStringLiteral("-f"), QStringLiteral("mp4"), m_temporaryOutput
+        QStringLiteral("-i"), source.absoluteFilePath()
     };
+    if (animatedGif) {
+        // GIF contains no sound. Build a full-color palette for this clip,
+        // then apply it to 12fps frames no wider than 640 pixels.
+        const QString gifFilter = QStringLiteral(
+            "[0:v]setpts=(PTS-STARTPTS)/%1,fps=12,"
+            "scale='min(640,iw)':-1:flags=lanczos,split[frames][colors];"
+            "[colors]palettegen=stats_mode=full[palette];"
+            "[frames][palette]paletteuse=dither=sierra2_4a[gifout]").arg(speed);
+        args << QStringLiteral("-filter_complex") << gifFilter
+             << QStringLiteral("-map") << QStringLiteral("[gifout]")
+             << QStringLiteral("-an")
+             << QStringLiteral("-loop") << QStringLiteral("0")
+             << QStringLiteral("-f") << QStringLiteral("gif");
+    } else {
+        args << QStringLiteral("-map") << QStringLiteral("0:V:0");
+        if (muteAudio) {
+            // No audio stream is encoded, not just a stream of silence.
+            args << QStringLiteral("-an");
+        } else {
+            args << QStringLiteral("-map") << QStringLiteral("0:a:0?")
+                 << QStringLiteral("-af") << audioFilter
+                 << QStringLiteral("-c:a") << QStringLiteral("aac")
+                 << QStringLiteral("-b:a") << QStringLiteral("192k");
+        }
+        args << QStringLiteral("-c:v") << QStringLiteral("libx264")
+             << QStringLiteral("-preset")
+             << (m_settings ? m_settings->encodingPreset() : QStringLiteral("veryfast"))
+             << QStringLiteral("-crf") << QStringLiteral("18")
+             << QStringLiteral("-vf") << videoFilter
+             << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
+             << QStringLiteral("-movflags") << QStringLiteral("+faststart")
+             << QStringLiteral("-f") << QStringLiteral("mp4");
+    }
+    args << m_temporaryOutput;
     m_process.setProgram(program);
     m_process.setArguments(args);
     m_process.start(QIODevice::ReadOnly);
@@ -277,7 +323,8 @@ void VideoExportController::markCompleted(const QString &outputPath, bool replac
     m_status = replaced
         ? (m_keepBackupForJob ? QStringLiteral("Original replaced. Backup saved.")
                               : QStringLiteral("Original replaced. No backup requested."))
-        : QStringLiteral("Edited MP4 saved.");
+        : (m_exportingGif ? QStringLiteral("Animated GIF saved.")
+                           : QStringLiteral("Edited MP4 saved."));
     m_error.clear();
     m_temporaryOutput.clear();
     emit progressChanged();

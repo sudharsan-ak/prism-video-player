@@ -19,6 +19,7 @@ Rectangle {
     property real endTime: 0
     property real duration: 0
     property real editSpeed: 1.0
+    property bool muteAudio: false
     readonly property var presetIds: ["ultrafast", "veryfast", "fast", "medium", "slow"]
     function presetLabel(id) {
         const names = ["Ultrafast", "Very Fast", "Fast", "Medium", "Slow"];
@@ -27,6 +28,7 @@ Rectangle {
 
     signal closeRequested()
     signal exportRequested()
+    signal exportGifRequested()
     signal replaceRequested()
     signal previewRequested()
     signal resetRequested()
@@ -176,7 +178,8 @@ Rectangle {
                 text: "Output: MP4 (H.264 + AAC)\n"
                     + "Edited duration: " + root.timeText((root.endTime - root.startTime)
                         / Math.max(0.25, root.editSpeed)) + "\n"
-                    + "Copy or replace original\nFirst audio track only\nSubtitles not included"
+                    + "MP4 audio: " + (root.muteAudio ? "Removed" : "First audio track") + "\n"
+                    + "GIF: Silent, 12 fps, up to 640px wide\nSubtitles not included"
                 lineHeight: 1.45
                 wrapMode: Text.WordWrap
             }
@@ -255,6 +258,29 @@ Rectangle {
                     radius: 9
                     color: parent.enabled ? (root.tokens.accentSolid || "#A89BFF")
                                           : (root.tokens.panelBorder || "#444")
+                }
+            }
+
+            Button {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                enabled: !videoExportController.busy && root.endTime - root.startTime >= 0.1
+                text: "Export animated GIF..."
+                onClicked: root.exportGifRequested()
+                font.pixelSize: 12
+                background: Rectangle {
+                    radius: 9
+                    color: root.tokens.panelGlassStrong || "#242331"
+                    border.width: 1
+                    border.color: root.tokens.accentSolid || "#A89BFF"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: root.tokens.textPrimary || "#fff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font: parent.font
                 }
             }
 

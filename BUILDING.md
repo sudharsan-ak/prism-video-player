@@ -127,3 +127,24 @@ named \`<title>-prism-backup-<timestamp>-<id>.mp4\` is kept only when
 **Acceptance testing:** Validate 0.25x, 0.5x, 1x, 2x exported durations
 and audio sync; test each encoding preset, the backup toggle ON/OFF,
 cancel and failed replacement, thumbnail reuse and all six themes.
+
+## Trim audio toggle and animated GIF export
+
+- In Edit → Trim timeline, **Sound on** retains the first source audio
+  track in an exported MP4. Clicking it changes the control to **Muted**,
+  mutes the preview and produces an MP4 with **no audio stream** when
+  using either Export edited copy or Replace original MP4. Default is
+  Sound on for each new editing session. Prism restores the original
+  playback mute state when leaving Edit mode or replacing a video.
+- The new **Export animated GIF...** action uses the selected IN/OUT
+  range and editing playback speed. GIFs are inherently silent.
+  Export creates a new .gif copy only; it never replaces the MP4.
+- GIF export uses FFmpeg's palettegen/paletteuse filters for better color
+  reproduction, 12 fps, up to 640 pixels wide without upscaling,
+  and an infinite animation loop. It may still be larger than MP4;
+  short clips generally work best. Encoding presets apply only to MP4.
+- GIFs and muted MP4s use the same background export progress and
+  cancellation as ordinary MP4 exports. No existing file is overwritten.
+- Test sound toggle in preview and both MP4 export modes; verify the
+  muted file has no audio stream. Also test GIF speed, loop behavior,
+  output size, cancellation, and reopening normal audio playback.

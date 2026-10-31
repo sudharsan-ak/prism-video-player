@@ -31,10 +31,15 @@ public:
     QString backupPath() const { return m_backupPath; }
 
     Q_INVOKABLE QUrl suggestedOutputUrl(const QString &sourcePath) const;
+    Q_INVOKABLE QUrl suggestedGifOutputUrl(const QString &sourcePath) const;
     Q_INVOKABLE bool startTrim(const QString &sourcePath, double startSeconds,
-                              double endSeconds, const QUrl &destination, double playbackSpeed = 1.0);
+                              double endSeconds, const QUrl &destination,
+                              double playbackSpeed = 1.0, bool muteAudio = false);
     Q_INVOKABLE bool startReplaceTrim(const QString &sourcePath, double startSeconds, double endSeconds,
-                                       double playbackSpeed = 1.0);
+                                       double playbackSpeed = 1.0, bool muteAudio = false);
+    Q_INVOKABLE bool startGif(const QString &sourcePath, double startSeconds,
+                             double endSeconds, const QUrl &destination,
+                             double playbackSpeed = 1.0);
     Q_INVOKABLE void completeReplacement();
     Q_INVOKABLE void cancel();
 
@@ -50,7 +55,8 @@ private:
     void parseProgress(const QByteArray &chunk);
     void finished(int exitCode, QProcess::ExitStatus exitStatus);
     bool beginTrim(const QString &sourcePath, double startSeconds, double endSeconds,
-                   const QUrl &destination, bool replaceOriginal, double playbackSpeed);
+                   const QUrl &destination, bool replaceOriginal, double playbackSpeed,
+                   bool muteAudio, bool animatedGif);
     void finalizeReplacement(int attempt);
     void saveFallbackCopy(const QString &reason);
     void markCompleted(const QString &outputPath, bool replaced);
@@ -58,6 +64,7 @@ private:
     SettingsStore *m_settings = nullptr;
     double m_playbackSpeed = 1.0;
     bool m_keepBackupForJob = false;
+    bool m_exportingGif = false;
     QProcess m_process;
     bool m_busy = false;
     bool m_cancelRequested = false;

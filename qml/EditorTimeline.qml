@@ -19,6 +19,7 @@ Rectangle {
     property real endTime: 0
     property real editSpeed: 1.0
     property bool previewPlaying: false
+    property bool muteAudio: false
 
     signal startTimeEdited(real seconds)
     signal endTimeEdited(real seconds)
@@ -26,6 +27,7 @@ Rectangle {
     signal previewRequested()
     signal togglePlaybackRequested()
     signal speedEdited(real speed)
+    signal audioMutedEdited(bool muted)
     signal resetRequested()
     signal exportRequested()
 
@@ -285,6 +287,15 @@ Rectangle {
                         }
                     }
                 }
+            }
+            TrimButton {
+                text: root.muteAudio ? "🔇 Muted" : "🔊 Sound on"
+                onClicked: root.audioMutedEdited(!root.muteAudio)
+                ToolTip.visible: hovered
+                ToolTip.text: root.muteAudio
+                    ? "Enable preview sound and include audio in MP4 exports"
+                    : "Mute preview and remove audio from exported MP4"
+                ToolTip.delay: 400
             }
             TrimButton {
                 text: "Set IN"

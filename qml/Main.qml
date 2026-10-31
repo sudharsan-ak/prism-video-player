@@ -30,6 +30,20 @@ ApplicationWindow {
     property bool previewSelectionPlaying: false
     property real editSpeed: 1.0
     property real normalPlaybackSpeed: 1.0
+    property bool editMuted: false
+    property bool normalMuted: false
+
+    function setEditMuted(muted) {
+        editMuted = muted;
+        if (videoSurface.mpv)
+            videoSurface.mpv.setProperty("mute", muted);
+    }
+
+    function restorePlaybackAudio() {
+        if (videoSurface.mpv)
+            videoSurface.mpv.setProperty("mute", normalMuted);
+    }
+
 
     function stopRangePreview() {
         previewSelectionPlaying = false;
@@ -64,6 +78,9 @@ ApplicationWindow {
         if (fullscreenMode)
             toggleFullscreen();
         normalPlaybackSpeed = mpv.speed;
+        const originalMute = String(mpv.getProperty("mute")).toLowerCase();
+        normalMuted = originalMute === "yes" || originalMute === "true" || originalMute === "1";
+        setEditMuted(false); // Keep audio in MP4 exports by default.
         editSpeed = 1.0;
         playerController.setSpeed(1.0);
         editSourcePath = mpv.mediaPath;
@@ -86,6 +103,7 @@ ApplicationWindow {
         previewSelectionPlaying = false;
         playerController.setPaused(true);
         playerController.setSpeed(normalPlaybackSpeed);
+        restorePlaybackAudio();
         editMode = false;
         videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
@@ -93,6 +111,13 @@ ApplicationWindow {
 
     function previewEditRange() {
         toggleEditPlayback();
+    }
+
+    function openGifSaveDialog() {
+        if (!editMode || videoExportController.busy)
+            return;
+        gifSaveDialog.selectedFile = videoExportController.suggestedGifOutputUrl(editSourcePath);
+        gifSaveDialog.open();
     }
 
     function openTrimSaveDialog() {
@@ -239,6 +264,8 @@ ApplicationWindow {
                     startTime: prismWindow.editStart
                     endTime: prismWindow.editEnd
                     editSpeed: prismWindow.editSpeed
+                    muteAudio: prismWindow.editMuted
+                    onAudioMutedEdited: function(muted) { prismWindow.setEditMuted(muted); }
                     previewPlaying: prismWindow.previewSelectionPlaying &&
                         videoSurface.mpv && !videoSurface.mpv.paused
                     onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
@@ -287,8 +314,10 @@ ApplicationWindow {
                 endTime: prismWindow.editEnd
                 duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
                 editSpeed: prismWindow.editSpeed
+                muteAudio: prismWindow.editMuted
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.openTrimSaveDialog()
+                onExportGifRequested: prismWindow.openGifSaveDialog()
                 onReplaceRequested: replaceConfirmDialog.open()
                 onPreviewRequested: prismWindow.previewEditRange()
                 onResetRequested: {
@@ -502,7 +531,8 @@ ApplicationWindow {
             videoExportController.startReplaceTrim(prismWindow.editSourcePath,
                                                    prismWindow.editStart,
                                                    prismWindow.editEnd,
-                                                   prismWindow.editSpeed);
+                                                   prismWindow.editSpeed,
+                                                   prismWindow.editMuted);
         }
         background: Rectangle {
             radius: 12
@@ -519,7 +549,9 @@ ApplicationWindow {
                 + (settingsStore.keepBackupOnReplace
                     ? "A timestamped backup will be kept beside it.\n\n"
                     : "No backup will be kept. This cannot be undone.\n\n")
-                + "The trimmed MP4 will include only the first audio track. "
+                + (prismWindow.editMuted
+                    ? "Audio is MUTED and will be removed from the exported MP4. "
+                    : "The trimmed MP4 will include the first audio track. ")
                 + "Other audio tracks and subtitles will NOT be preserved.\n\n"
                 + "Choose Export edited copy instead if you want to keep the original untouched."
         }
@@ -536,7 +568,23 @@ ApplicationWindow {
             videoExportController.startTrim(prismWindow.editSourcePath,
                                              prismWindow.editStart,
                                              prismWindow.editEnd,
-                                             selectedFile, prismWindow.editSpeed);
+                                             selectedFile, prismWindow.editSpeed,
+                                             prismWindow.editMuted);
+        }
+    }
+
+    FileDialog {
+        id: gifSaveDialog
+        title: "Export animated GIF (silent, looping)"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "gif"
+        nameFilters: ["Animated GIF (*.gif)"]
+        onAccepted: {
+            prismWindow.stopRangePreview();
+            videoExportController.startGif(prismWindow.editSourcePath,
+                                            prismWindow.editStart,
+                                            prismWindow.editEnd,
+                                            selectedFile, prismWindow.editSpeed);
         }
     }
 
@@ -546,6 +594,7 @@ ApplicationWindow {
             prismWindow.previewSelectionPlaying = false;
             playerController.setPaused(true);
             playerController.setSpeed(prismWindow.normalPlaybackSpeed);
+            prismWindow.restorePlaybackAudio();
             prismWindow.editMode = false;
             videoThumbnailController.stop();
             // Release the source handle before Windows can replace it.
@@ -561,6 +610,8 @@ ApplicationWindow {
                            : "Original replaced successfully.", false);
             } else if (videoExportController.error.length > 0) {
                 toast.show("Replacement not confirmed. Edited copy saved. Inspect original.", true);
+            } else if (outputUrl.toString().toLowerCase().endsWith(".gif")) {
+                toast.show("Animated GIF saved successfully.", false);
             } else {
                 toast.show("Edited video saved successfully.", false);
             }
@@ -594,6 +645,7 @@ ApplicationWindow {
                 videoSurface.mpv.mediaPath !== prismWindow.editSourcePath) {
                 prismWindow.previewSelectionPlaying = false;
                 playerController.setSpeed(prismWindow.normalPlaybackSpeed);
+                prismWindow.restorePlaybackAudio();
                 prismWindow.editMode = false;
                 videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);
