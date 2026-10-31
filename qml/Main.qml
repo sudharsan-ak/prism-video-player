@@ -47,6 +47,68 @@ ApplicationWindow {
     property int lastEditAudibleVolume: 100
     property int normalPlaybackVolume: 80
     property bool normalMuted: false
+    property int normalVideoRotation: 0
+    property int editSourceWidth: 0
+    property int editSourceHeight: 0
+    property int editQuarterTurns: 0
+    property bool cropGuidesVisible: false
+    property real editCropX: 0
+    property real editCropY: 0
+    property real editCropWidth: 1
+    property real editCropHeight: 1
+
+    function setEditCrop(x, y, w, h) {
+        const cw = Math.max(0.05, Math.min(1, Number(w)));
+        const ch = Math.max(0.05, Math.min(1, Number(h)));
+        editCropWidth = cw;
+        editCropHeight = ch;
+        editCropX = Math.max(0, Math.min(1 - cw, Number(x)));
+        editCropY = Math.max(0, Math.min(1 - ch, Number(y)));
+    }
+
+    function resetEditCrop() { setEditCrop(0, 0, 1, 1); }
+
+    function setCropPreset(preset) {
+        if (preset === "Full") {
+            resetEditCrop();
+            return;
+        }
+        const ratio = preset === "1:1" ? 1 :
+                      preset === "16:9" ? 16 / 9 :
+                      preset === "9:16" ? 9 / 16 : 0;
+        if (ratio <= 0)
+            return;
+        const w = editQuarterTurns % 2 ? editSourceHeight : editSourceWidth;
+        const h = editQuarterTurns % 2 ? editSourceWidth : editSourceHeight;
+        if (w <= 0 || h <= 0)
+            return;
+        const sourceRatio = w / h;
+        const cw = Math.min(1, ratio / sourceRatio);
+        const ch = Math.min(1, sourceRatio / ratio);
+        setEditCrop((1 - cw) / 2, (1 - ch) / 2, cw, ch);
+        cropGuidesVisible = true;
+    }
+
+    function setEditRotation(turns) {
+        const target = ((Math.round(turns) % 4) + 4) % 4;
+        let delta = (target - editQuarterTurns + 4) % 4;
+        let x = editCropX, y = editCropY, w = editCropWidth, h = editCropHeight;
+        while (delta-- > 0) {
+            const oldX = x, oldY = y, oldW = w, oldH = h;
+            x = 1 - oldY - oldH;
+            y = oldX;
+            w = oldH;
+            h = oldW;
+        }
+        editQuarterTurns = target;
+        setEditCrop(x, y, w, h);
+        playerController.setRotation(target);
+    }
+
+    function restorePlaybackRotation() {
+        if (videoSurface.mpv)
+            videoSurface.mpv.setProperty("video-rotate", normalVideoRotation);
+    }
 
     function setEditVolume(percent) {
         const value = Math.max(0, Math.min(100, Math.round(percent)));
@@ -104,6 +166,14 @@ ApplicationWindow {
         const originalMute = String(mpv.getProperty("mute")).toLowerCase();
         normalMuted = originalMute === "yes" || originalMute === "true" || originalMute === "1";
         normalPlaybackVolume = mpv.volume;
+        const priorRotation = Number(mpv.getProperty("video-rotate"));
+        normalVideoRotation = isFinite(priorRotation) ? priorRotation : 0;
+        editSourceWidth = mpv.videoWidth;
+        editSourceHeight = mpv.videoHeight;
+        editQuarterTurns = 0;
+        cropGuidesVisible = false;
+        resetEditCrop();
+        playerController.setRotation(0);
         lastEditAudibleVolume = 100;
         setEditVolume(100); // Default to original source gain.
         editSpeed = 1.0;
@@ -129,6 +199,7 @@ ApplicationWindow {
         playerController.setPaused(true);
         playerController.setSpeed(normalPlaybackSpeed);
         restorePlaybackAudio();
+        restorePlaybackRotation();
         editMode = false;
         videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
@@ -148,9 +219,12 @@ ApplicationWindow {
         }
         const ok = animatedGif
             ? exportQueue.queueGif(editSourcePath, editStart, editEnd,
-                                   destination, editSpeed)
+                                   destination, editSpeed, editQuarterTurns,
+                                   editCropX, editCropY, editCropWidth, editCropHeight)
             : exportQueue.queueMp4(editSourcePath, editStart, editEnd,
-                                   destination, editSpeed, editVolumePercent);
+                                   destination, editSpeed, editVolumePercent,
+                                   editQuarterTurns, editCropX, editCropY,
+                                   editCropWidth, editCropHeight);
         if (!ok) {
             toast.show(exportQueue.lastError, true);
             return;
@@ -179,7 +253,9 @@ ApplicationWindow {
             stopRangePreview();
             if (!videoExportController.startReplaceTrim(editSourcePath, editStart,
                                                          editEnd, editSpeed,
-                                                         editVolumePercent)) {
+                                                         editVolumePercent, editQuarterTurns,
+                                                         editCropX, editCropY,
+                                                         editCropWidth, editCropHeight)) {
                 toast.show(videoExportController.error || "Could not start replacement.", true);
             }
         } else {
@@ -417,6 +493,16 @@ ApplicationWindow {
                 duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
                 editSpeed: prismWindow.editSpeed
                 audioVolumePercent: prismWindow.editVolumePercent
+                cropActive: prismWindow.cropGuidesVisible
+                cropX: prismWindow.editCropX
+                cropY: prismWindow.editCropY
+                cropWidth: prismWindow.editCropWidth
+                cropHeight: prismWindow.editCropHeight
+                quarterTurns: prismWindow.editQuarterTurns
+                onCropModeToggled: prismWindow.cropGuidesVisible = !prismWindow.cropGuidesVisible
+                onCropResetRequested: prismWindow.resetEditCrop()
+                onCropPresetRequested: function(preset) { prismWindow.setCropPreset(preset); }
+                onRotationRequested: function(turns) { prismWindow.setEditRotation(turns); }
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
@@ -478,6 +564,25 @@ ApplicationWindow {
     onFullscreenModeChanged: {
         videoSurface.parent = fullscreenMode ? fullscreenVideoSlot : windowedVideoSlot;
         videoSurface.anchors.fill = videoSurface.parent;
+    }
+
+    CropOverlay {
+        id: cropOverlay
+        parent: windowedVideoSlot
+        anchors.fill: parent
+        z: 10
+        visible: prismWindow.editMode && prismWindow.cropGuidesVisible
+        enabled: visible && exportQueue.canQueue
+        sourceWidth: prismWindow.editSourceWidth
+        sourceHeight: prismWindow.editSourceHeight
+        quarterTurns: prismWindow.editQuarterTurns
+        cropX: prismWindow.editCropX
+        cropY: prismWindow.editCropY
+        cropWidth: prismWindow.editCropWidth
+        cropHeight: prismWindow.editCropHeight
+        onCropEdited: function(x, y, w, h) {
+            prismWindow.setEditCrop(x, y, w, h);
+        }
     }
 
     ContextMenu {
@@ -895,7 +1000,10 @@ ApplicationWindow {
         onAccepted: {
             if (!exportQueue.queueMp4(prismWindow.editSourcePath,
                                       prismWindow.editStart, prismWindow.editEnd,
-                                      selectedFile, prismWindow.editSpeed, prismWindow.editVolumePercent))
+                                      selectedFile, prismWindow.editSpeed, prismWindow.editVolumePercent,
+                                      prismWindow.editQuarterTurns, prismWindow.editCropX,
+                                      prismWindow.editCropY, prismWindow.editCropWidth,
+                                      prismWindow.editCropHeight))
                 toast.show(exportQueue.lastError, true);
             else
                 toast.show("MP4 added to export queue.", false);
@@ -911,7 +1019,10 @@ ApplicationWindow {
         onAccepted: {
             if (!exportQueue.queueGif(prismWindow.editSourcePath,
                                       prismWindow.editStart, prismWindow.editEnd,
-                                      selectedFile, prismWindow.editSpeed))
+                                      selectedFile, prismWindow.editSpeed,
+                                      prismWindow.editQuarterTurns, prismWindow.editCropX,
+                                      prismWindow.editCropY, prismWindow.editCropWidth,
+                                      prismWindow.editCropHeight))
                 toast.show(exportQueue.lastError, true);
             else
                 toast.show("GIF added to export queue.", false);
@@ -969,6 +1080,7 @@ ApplicationWindow {
             playerController.setPaused(true);
             playerController.setSpeed(prismWindow.normalPlaybackSpeed);
             prismWindow.restorePlaybackAudio();
+            prismWindow.restorePlaybackRotation();
             prismWindow.editMode = false;
             videoThumbnailController.stop();
             // Release the source handle before Windows can replace it.
@@ -1020,6 +1132,7 @@ ApplicationWindow {
                 prismWindow.previewSelectionPlaying = false;
                 playerController.setSpeed(prismWindow.normalPlaybackSpeed);
                 prismWindow.restorePlaybackAudio();
+                prismWindow.restorePlaybackRotation();
                 prismWindow.editMode = false;
                 videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);

@@ -58,6 +58,8 @@ qt_add_qml_module(Prism
         qml/LibraryPanel.qml
         qml/AdjustmentsPanel.qml
         qml/EditorPanel.qml
+        qml/CropControls.qml
+        qml/CropOverlay.qml
         qml/EditorTimeline.qml
         qml/BottomControlBar.qml
         qml/FullscreenOverlay.qml

@@ -2,8 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// First editing milestone: functional trim/export. Crop and rotation
-// will be added in the second PR, not shown as working actions here.
+// Functional trim, crop and rotation controls share the existing export dock.
 Rectangle {
     id: root
     width: 288
@@ -24,6 +23,14 @@ Rectangle {
     property real duration: 0
     property real editSpeed: 1.0
     property int audioVolumePercent: 100
+    property bool cropActive: false
+    property real cropX: 0
+    property real cropY: 0
+    property real cropWidth: 1
+    property real cropHeight: 1
+    property int quarterTurns: 0
+    readonly property bool isCropped: cropX > 0.0001 || cropY > 0.0001 ||
+        cropWidth < 0.9999 || cropHeight < 0.9999
     readonly property var presetIds: ["ultrafast", "veryfast", "fast", "medium", "slow"]
     function presetLabel(id) {
         const names = ["Ultrafast", "Very Fast", "Fast", "Medium", "Slow"];
@@ -42,6 +49,10 @@ Rectangle {
      signal previewRequested()
     signal resetRequested()
     signal queueRequested()
+    signal cropModeToggled()
+    signal cropResetRequested()
+    signal cropPresetRequested(string preset)
+    signal rotationRequested(int quarterTurns)
 
     function mp4ModeLabel() {
         switch (settingsStore.mp4ExportMode) {
@@ -207,35 +218,21 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            CropControls {
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                Layout.preferredHeight: 43
-                radius: 9
-                color: root.tokens.panelGlassStrong || "#242331"
-                border.color: root.tokens.panelBorder || "#444"
-                Text {
-                    anchors.centerIn: parent
-                    text: "Crop  ·  Available in next PR"
-                    color: root.tokens.textMuted || "#777"
-                    font.pixelSize: 11
-                }
-            }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.preferredHeight: 43
-                radius: 9
-                color: root.tokens.panelGlassStrong || "#242331"
-                border.color: root.tokens.panelBorder || "#444"
-                Text {
-                    anchors.centerIn: parent
-                    text: "Rotate  ·  Available in next PR"
-                    color: root.tokens.textMuted || "#777"
-                    font.pixelSize: 11
-                }
+                tokens: root.tokens
+                cropActive: root.cropActive
+                cropX: root.cropX
+                cropY: root.cropY
+                cropWidth: root.cropWidth
+                cropHeight: root.cropHeight
+                quarterTurns: root.quarterTurns
+                onCropModeToggled: root.cropModeToggled()
+                onCropResetRequested: root.cropResetRequested()
+                onCropPresetRequested: function(preset) { root.cropPresetRequested(preset); }
+                onRotationRequested: function(turns) { root.rotationRequested(turns); }
             }
 
             Rectangle {
@@ -268,6 +265,11 @@ Rectangle {
                        root.audioVolumePercent === 100 ? "Original level" :
                        root.audioVolumePercent + "% of original") + "\n"
                     + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
+                    + "\nRotation: " + (root.quarterTurns * 90) + "°"
+                    + "\nCrop: " + (root.isCropped
+                        ? Math.round(root.cropWidth * 100) + "% × " +
+                          Math.round(root.cropHeight * 100) + "%"
+                        : "Full frame")
                     + "\nSubtitles not included"
                 lineHeight: 1.45
                 wrapMode: Text.WordWrap
