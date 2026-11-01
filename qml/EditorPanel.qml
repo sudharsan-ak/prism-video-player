@@ -63,6 +63,8 @@ Rectangle {
     signal cropResetRequested()
     signal cropPresetRequested(string preset)
     signal rotationRequested(int quarterTurns)
+    signal speedEdited(real speed)
+    signal audioVolumeEdited(int percent)
     signal selectSegmentRequested(int id)
     signal restoreSegmentRequested(int id)
 
@@ -457,6 +459,52 @@ Rectangle {
                     titleText: "Export Settings"
                     subtitleText: root.presetLabel(settingsStore.encodingPreset)
                     expanded: false
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.rightMargin: 16
+                        text: "PLAYBACK / EXPORT SPEED"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: root.tokens.textMuted || "#888"
+                    }
+                    ComboBox {
+                        id: editSpeedChoice
+                        property var speeds: [0.25,0.5,0.75,1.0,1.25,1.5,2.0]
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        model: ["0.25x","0.5x","0.75x","1.0x","1.25x","1.5x","2.0x"]
+                        currentIndex: Math.max(0,speeds.indexOf(root.editSpeed))
+                        onActivated: function(index) { root.speedEdited(speeds[index]); }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        Text {
+                            text: "MP4 AUDIO LEVEL"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: root.tokens.textMuted || "#888"
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: root.audioVolumePercent + "%"
+                            font.pixelSize: 10
+                            color: root.tokens.accentSolid || "#29C7AC"
+                        }
+                    }
+                    Slider {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.rightMargin: 16
+                        from: 0; to: 100; stepSize: 5
+                        value: root.audioVolumePercent
+                        onMoved: root.audioVolumeEdited(Math.round(value))
+                    }
+
+
             Text {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16

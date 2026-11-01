@@ -126,6 +126,20 @@ QtObject {
                Object.assign({},s,{removed:false,collapsed:false}) : s), selectedId, nextId);
         return true;
     }
+    function loadExample() {
+        if (sourceDuration < 1.0) {
+            warning = "Example needs a video longer than one second.";
+            return false;
+        }
+        const a = sourceDuration*0.225, b = sourceDuration*0.375;
+        const first = nextId, middle=nextId+1, last=nextId+2;
+        commit([
+            {id:first,start:0,end:a,removed:false,collapsed:false},
+            {id:middle,start:a,end:b,removed:true,collapsed:false},
+            {id:last,start:b,end:sourceDuration,removed:false,collapsed:false}
+        ], middle, nextId+3);
+        return true;
+    }
     function resetEdits() {
         if (segments.length === 1 && !segments[0].removed && !segments[0].collapsed)
             return;

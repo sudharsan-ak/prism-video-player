@@ -511,6 +511,8 @@ ApplicationWindow {
                     previewPlaying: (prismWindow.previewSelectionPlaying ||
                         prismWindow.normalEditPlaybackPlaying) &&
                         videoSurface.mpv && !videoSurface.mpv.paused
+                    rangePlaying: prismWindow.previewSelectionPlaying &&
+                        videoSurface.mpv && !videoSurface.mpv.paused
                     onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
                     onSpeedEdited: function(value) {
                         prismWindow.editSpeed = value;
@@ -570,6 +572,12 @@ ApplicationWindow {
                     onResetAllRequested: {
                         prismWindow.stopRangePreview();
                         editCuts.resetEdits();
+                        prismWindow.editStart = 0;
+                        prismWindow.editEnd = editCuts.sourceDuration;
+                    }
+                    onExampleRequested: {
+                        prismWindow.stopRangePreview();
+                        editCuts.loadExample();
                         prismWindow.editStart = 0;
                         prismWindow.editEnd = editCuts.sourceDuration;
                     }
@@ -633,6 +641,11 @@ ApplicationWindow {
                 onCropResetRequested: prismWindow.resetEditCrop()
                 onCropPresetRequested: function(preset) { prismWindow.setCropPreset(preset); }
                 onRotationRequested: function(turns) { prismWindow.setEditRotation(turns); }
+                onSpeedEdited: function(value) {
+                    prismWindow.editSpeed = value;
+                    playerController.setSpeed(value);
+                }
+                onAudioVolumeEdited: function(value) { prismWindow.setEditVolume(value); }
                 onCloseRequested: prismWindow.leaveEditing()
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
@@ -1315,6 +1328,28 @@ ApplicationWindow {
         onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
     }
 
+    Shortcut {
+        sequence: "R"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.toggleEditPlayback()
+    }
+    Shortcut {
+        sequence: "J"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.jumpNextKept()
+    }
+    Shortcut {
+        sequence: "I"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.editStart = Math.max(0,Math.min(
+            videoSurface.mpv.position,prismWindow.editEnd-.12))
+    }
+    Shortcut {
+        sequence: "O"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.editEnd = Math.min(editCuts.sourceDuration,
+            Math.max(videoSurface.mpv.position,prismWindow.editStart+.12))
+    }
     Item {
         id: globalShortcuts
         anchors.fill: parent
@@ -1352,7 +1387,7 @@ ApplicationWindow {
             event.accepted = true;
             break;
         case Qt.Key_O:
-            openFilesDialog.open();
+            if (!prismWindow.editMode) openFilesDialog.open();
             event.accepted = true;
             break;
         case Qt.Key_S:
