@@ -591,6 +591,14 @@ ApplicationWindow {
                 segmented: editCuts.hasCuts
                 editedDuration: editCuts.keptDuration
                 segmentCount: editCuts.keptRanges.length
+                segmentItems: editCuts.segments
+                selectedSegmentId: editCuts.selectedId
+                onSelectSegmentRequested: function(id) { editCuts.select(id); }
+                onRestoreSegmentRequested: function(id) {
+                    prismWindow.stopRangePreview();
+                    editCuts.select(id);
+                    editCuts.restore();
+                }
                 editSpeed: prismWindow.editSpeed
                 audioVolumePercent: prismWindow.editVolumePercent
                 cropActive: prismWindow.cropGuidesVisible

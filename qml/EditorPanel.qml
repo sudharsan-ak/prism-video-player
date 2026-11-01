@@ -17,7 +17,12 @@ Rectangle {
     }
     property string sourceTitle: ""
     property string sourcePath: ""
-    readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4")
+    readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4") && !segmented
+    property bool segmented: false
+    property real editedDuration: 0
+    property int segmentCount: 1
+    property var segmentItems: []
+    property int selectedSegmentId: -1
     property real startTime: 0
     property real endTime: 0
     property real duration: 0
@@ -53,8 +58,12 @@ Rectangle {
     signal cropResetRequested()
     signal cropPresetRequested(string preset)
     signal rotationRequested(int quarterTurns)
+    signal selectSegmentRequested(int id)
+    signal restoreSegmentRequested(int id)
 
     function mp4ModeLabel() {
+        if (segmented && settingsStore.mp4ExportMode === "replace")
+            return "Copy only (segmented edit)";
         switch (settingsStore.mp4ExportMode) {
         case "saveAs": return "Save As dialog";
         case "replace": return "Replace original";
@@ -287,9 +296,58 @@ Rectangle {
                     Layout.leftMargin: 9
                     Layout.rightMargin: 9
                     tokens: root.tokens
+                    titleText: "Segments"
+                    subtitleText: root.segmentItems.length + " pieces"
+                    expanded: false
+                    Repeater {
+                        model: root.segmentItems
+                        RowLayout {
+                            id: segLine
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
+                            spacing: 5
+                            Button {
+                                Layout.fillWidth: true
+                                text: "Segment " + (index + 1) +
+                                      (segLine.modelData.removed ? " · Removed" : " · Kept")
+                                font.pixelSize: 10
+                                onClicked: root.selectSegmentRequested(segLine.modelData.id)
+                                background: Rectangle {
+                                    radius: 5
+                                    color: root.selectedSegmentId === segLine.modelData.id
+                                        ? (root.tokens.accentTint || "#193F37")
+                                        : (root.tokens.panelGlassStrong || "#192B30")
+                                    border.color: root.selectedSegmentId === segLine.modelData.id
+                                        ? (root.tokens.accentSolid || "#28DCA7")
+                                        : (root.tokens.panelBorder || "#444")
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: root.tokens.textPrimary || "#fff"
+                                    font: parent.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Button {
+                                text: "Restore"
+                                visible: segLine.modelData.removed
+                                font.pixelSize: 10
+                                onClicked: root.restoreSegmentRequested(segLine.modelData.id)
+                            }
+                        }
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
                     titleText: "Export Summary"
                     subtitleText: root.timeText(
-                        (root.endTime - root.startTime) / Math.max(0.25, root.editSpeed))
+                        root.editedDuration / Math.max(0.25, root.editSpeed))
                     expanded: false
             Text {
                 Layout.fillWidth: true
@@ -298,8 +356,9 @@ Rectangle {
                 color: root.tokens.textSecondary || "#aaa"
                 font.pixelSize: 11
                 text: "Output: MP4 (H.264 + AAC)\n"
-                    + "Edited duration: " + root.timeText((root.endTime - root.startTime)
+                    + "Edited duration: " + root.timeText(root.editedDuration
                         / Math.max(0.25, root.editSpeed)) + "\n"
+                    + "Kept segments: " + root.segmentCount + "\n"
                     + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
                        root.audioVolumePercent === 100 ? "Original level" :
                        root.audioVolumePercent + "% of original") + "\n"
@@ -544,11 +603,13 @@ Rectangle {
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        enabled: root.endTime - root.startTime >= 0.1 &&
-                            (settingsStore.mp4ExportMode === "replace"
+                        enabled: (root.segmented ? root.editedDuration >= 0.05 :
+                                      root.endTime - root.startTime >= 0.1) &&
+                            (settingsStore.mp4ExportMode === "replace" && !root.segmented
                                 ? (root.canReplace && !exportQueue.hasOutstanding &&
                                    !videoExportController.busy) : exportQueue.canQueue)
-                        text: settingsStore.mp4ExportMode === "replace" ? "Replace MP4" : "MP4"
+                        text: root.segmented && settingsStore.mp4ExportMode === "replace"
+                            ? "MP4 copy" : settingsStore.mp4ExportMode === "replace" ? "Replace MP4" : "MP4"
                         onClicked: root.exportRequested()
                         font.bold: true
                         font.pixelSize: settingsStore.mp4ExportMode === "replace" ? 11 : 12
@@ -574,7 +635,9 @@ Rectangle {
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
+                        enabled: exportQueue.canQueue &&
+                            (root.segmented ? root.editedDuration >= 0.05 :
+                               root.endTime - root.startTime >= 0.1)
                         text: "GIF"
                         onClicked: root.exportGifRequested()
                         font.bold: true
@@ -650,7 +713,8 @@ Rectangle {
                 Layout.rightMargin: 15
                 visible: settingsStore.mp4ExportMode === "replace"
                 text: !root.canReplace
-                    ? "Replace original is only available for MP4."
+                    ? (root.segmented ? "Segment editing always exports a new copy."
+                                      : "Replace original is only available for MP4.")
                     : exportQueue.hasOutstanding
                         ? "Replacement waits until the export queue finishes."
                         : settingsStore.keepBackupOnReplace
