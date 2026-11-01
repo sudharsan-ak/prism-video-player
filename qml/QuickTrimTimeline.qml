@@ -78,88 +78,102 @@ Rectangle {
         anchors.bottomMargin: 9
         spacing: 7
 
-        // Row 1: label/back left, transport centered, stats + speed + sound right.
-        RowLayout {
+        // Row 1: label/back left, transport true-centered, stats + speed + sound right.
+        // An Item with anchored groups (not a RowLayout with equal spacers) so the
+        // transport sits at the row's real midpoint regardless of how wide the
+        // left and right content blocks are.
+        Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
-            spacing: 9
-            Text { text: "QUICK TRIM"; font.pixelSize: 11; font.bold: true; color: root.ink }
 
-            Item { Layout.fillWidth: true }
-
-            TrimButton {
-                text: "↤"
-                onClicked: root.beginningRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: "Back to trim start"
+            RowLayout {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 9
+                Text { text: "QUICK TRIM"; font.pixelSize: 11; font.bold: true; color: root.ink }
             }
-            Button {
-                id: playButton
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                padding: 0
-                onClicked: root.playRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: root.playing ? "Pause" : "Play trim"
-                background: Rectangle {
-                    radius: width/2
-                    color: playButton.hovered ? Qt.lighter(root.accent,1.14) : root.accent
+
+            RowLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 9
+                TrimButton {
+                    text: "↤"
+                    onClicked: root.beginningRequested()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Back to trim start"
                 }
-                contentItem: Item {
-                    Text {
-                        visible: !root.playing
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: 1
-                        text: "▶"
-                        color: root.tokens.videoCardBackground || "#0B0B14"
-                        font.pixelSize: 15
+                Button {
+                    id: playButton
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    padding: 0
+                    onClicked: root.playRequested()
+                    ToolTip.visible: hovered
+                    ToolTip.text: root.playing ? "Pause" : "Play trim"
+                    background: Rectangle {
+                        radius: width/2
+                        color: playButton.hovered ? Qt.lighter(root.accent,1.14) : root.accent
                     }
-                    Row {
-                        visible: root.playing
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Rectangle { width: 4; height: 12; radius: 1; color: root.tokens.videoCardBackground || "#0B0B14" }
-                        Rectangle { width: 4; height: 12; radius: 1; color: root.tokens.videoCardBackground || "#0B0B14" }
+                    contentItem: Item {
+                        Text {
+                            visible: !root.playing
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: 1
+                            text: "▶"
+                            color: root.tokens.videoCardBackground || "#0B0B14"
+                            font.pixelSize: 15
+                        }
+                        Row {
+                            visible: root.playing
+                            anchors.centerIn: parent
+                            spacing: 3
+                            Rectangle { width: 4; height: 12; radius: 1; color: root.tokens.videoCardBackground || "#0B0B14" }
+                            Rectangle { width: 4; height: 12; radius: 1; color: root.tokens.videoCardBackground || "#0B0B14" }
+                        }
                     }
                 }
-            }
-            Text {
-                text: root.timeText(root.position)+" / "+root.timeText(root.duration)
-                font.pixelSize: 11; color: root.ink
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Text { text: "IN"; font.pixelSize: 10; color: root.muted }
-            Text { text: root.timeText(root.startTime); font.pixelSize: 11; font.bold: true; color: root.ink }
-            Text { text: "OUT"; font.pixelSize: 10; color: root.muted }
-            Text { text: root.timeText(root.endTime); font.pixelSize: 11; font.bold: true; color: root.ink }
-            Text { text: "SELECTED"; visible: root.width>=950; font.pixelSize: 10; color: root.muted }
-            Text {
-                text: root.timeText(root.endTime-root.startTime)
-                visible: root.width>=950; font.pixelSize: 11; font.bold: true; color: root.ink
-            }
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.line }
-            TrimButton {
-                id: speedButton
-                text: "▸  "+root.speedText(root.playbackSpeed)
-                onClicked: {
-                    const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
-                    speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
-                        pos.x+speedButton.width-speedPopup.width));
-                    speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
-                    speedPopup.open();
+                Text {
+                    text: root.timeText(root.position)+" / "+root.timeText(root.duration)
+                    font.pixelSize: 11; color: root.ink
                 }
             }
-            TrimButton {
-                id: soundButton
-                text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
-                onClicked: {
-                    const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
-                    volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
-                        pos.x+soundButton.width-volumePopup.width));
-                    volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
-                    volumePopup.open();
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 9
+                Text { text: "IN"; font.pixelSize: 10; color: root.muted }
+                Text { text: root.timeText(root.startTime); font.pixelSize: 11; font.bold: true; color: root.ink }
+                Text { text: "OUT"; font.pixelSize: 10; color: root.muted }
+                Text { text: root.timeText(root.endTime); font.pixelSize: 11; font.bold: true; color: root.ink }
+                Text { text: "SELECTED"; visible: root.width>=950; font.pixelSize: 10; color: root.muted }
+                Text {
+                    text: root.timeText(root.endTime-root.startTime)
+                    visible: root.width>=950; font.pixelSize: 11; font.bold: true; color: root.ink
+                }
+                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.line }
+                TrimButton {
+                    id: speedButton
+                    text: "▸  "+root.speedText(root.playbackSpeed)
+                    onClicked: {
+                        const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
+                        speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
+                            pos.x+speedButton.width-speedPopup.width));
+                        speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
+                        speedPopup.open();
+                    }
+                }
+                TrimButton {
+                    id: soundButton
+                    text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
+                    onClicked: {
+                        const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
+                        volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
+                            pos.x+soundButton.width-volumePopup.width));
+                        volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
+                        volumePopup.open();
+                    }
                 }
             }
         }

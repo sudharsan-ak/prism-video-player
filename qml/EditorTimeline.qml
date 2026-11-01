@@ -7,7 +7,7 @@ import QtQuick.Layouts
 // scrubs mpv position; export cuts at the exact chosen times.
 Rectangle {
     id: root
-    height: 250
+    height: 280
     color: tokens.panelGlass || "#20202B"
     border.color: tokens.panelBorder || "transparent"
     border.width: 1
@@ -131,69 +131,105 @@ Rectangle {
         anchors.bottomMargin: 10
         spacing: 5
 
-        // Row 1: label/back, transport, segment/export stats, zoom, speed, volume.
-        // A Flow (not RowLayout) so this degrades to wrapped rows instead of
-        // overflowing/clipping once the window gets narrow or the sidebar opens.
-        Flow {
-            id: headerFlow
+        // Row 1: label/back left, transport true-centered, zoom right.
+        // An Item with anchored groups (not a RowLayout with equal spacers) so
+        // the transport sits at the row's real midpoint regardless of how wide
+        // the left and right content blocks are.
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: childrenRect.height
-            spacing: 9
-            Text {
-                text: "ADVANCED EDITOR"
-                color: root.tokens.textPrimary || "#E6F6F6"
-                font.pixelSize: 11
-                font.bold: true
-                height: 30
-                verticalAlignment: Text.AlignVCenter
-            }
-            RibbonButton { text: "← Quick Trim"; onClicked: root.quickTrimRequested() }
+            Layout.preferredHeight: 30
 
-            RibbonButton {
-                text: "↤"
-                onClicked: root.beginningRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: "Beginning of edited timeline"
-            }
-            Button {
-                id: previewPlay
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                padding: 0
-                onClicked: root.normalPlaybackRequested()
-                background: Rectangle {
-                    radius: width/2
-                    color: previewPlay.hovered ? Qt.lighter(root.tokens.accentSolid || "#29C7AC",1.1)
-                                                : (root.tokens.accentSolid || "#29C7AC")
+            RowLayout {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 9
+                Text {
+                    text: "ADVANCED EDITOR"
+                    color: root.tokens.textPrimary || "#E6F6F6"
+                    font.pixelSize: 11
+                    font.bold: true
                 }
-                contentItem: Item {
-                    Text {
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: 1
-                        visible: !root.previewPlaying
-                        text: "▶"
-                        font.pixelSize: 15
-                        color: "#071D1D"
+                RibbonButton { text: "← Quick Trim"; onClicked: root.quickTrimRequested() }
+            }
+
+            RowLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 9
+                RibbonButton {
+                    text: "↤"
+                    onClicked: root.beginningRequested()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Beginning of edited timeline"
+                }
+                Button {
+                    id: previewPlay
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    padding: 0
+                    onClicked: root.normalPlaybackRequested()
+                    background: Rectangle {
+                        radius: width/2
+                        color: previewPlay.hovered ? Qt.lighter(root.tokens.accentSolid || "#29C7AC",1.1)
+                                                    : (root.tokens.accentSolid || "#29C7AC")
                     }
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        visible: root.previewPlaying
-                        Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
-                        Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                    contentItem: Item {
+                        Text {
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: 1
+                            visible: !root.previewPlaying
+                            text: "▶"
+                            font.pixelSize: 15
+                            color: "#071D1D"
+                        }
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 3
+                            visible: root.previewPlaying
+                            Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                            Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                        }
                     }
                 }
+                Text {
+                    text: root.timeText(root.keptPosition) + " / " + root.timeText(root.keptDuration)
+                    font.pixelSize: 11
+                    color: root.tokens.textPrimary || "#E6F6F6"
+                }
             }
-            Text {
-                text: root.timeText(root.keptPosition) + " / " + root.timeText(root.keptDuration)
-                font.pixelSize: 11
-                color: root.tokens.textPrimary || "#E6F6F6"
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 5
+                RibbonButton {
+                    text: "−"
+                    enabled: root.timelineZoom > 1.001
+                    onClicked: root.stepZoom(-1)
+                }
+                Text {
+                    text: Math.round(root.timelineZoom*100) + "%"
+                    color: root.tokens.textSecondary || "#85AAB1"
+                    font.pixelSize: 10
+                    Layout.preferredWidth: 36
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                RibbonButton { text: "+"; enabled: root.timelineZoom < 7.999; onClicked: root.stepZoom(1) }
+                RibbonButton { text: "Fit"; onClicked: root.setZoom(1) }
             }
+        }
+
+        // Row 1b: segment/export stats, speed and volume, right-aligned.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 24
+            spacing: 5
+            Item { Layout.fillWidth: true }
 
             Rectangle {
                 height: 24
                 visible: root.width >= 820
-                width: visible ? countText.implicitWidth+16 : 0
+                Layout.preferredWidth: visible ? countText.implicitWidth+16 : 0
                 radius: 12
                 color: root.tokens.panelGlassStrong || "#0C3038"
                 border.color: root.tokens.panelBorder || "#23515A"
@@ -208,7 +244,7 @@ Rectangle {
             Rectangle {
                 height: 24
                 visible: root.width >= 950
-                width: visible ? editedTimeText.implicitWidth+18 : 0
+                Layout.preferredWidth: visible ? editedTimeText.implicitWidth+18 : 0
                 radius: 12
                 color: root.tokens.panelGlassStrong || "#0C3038"
                 border.color: root.tokens.panelBorder || "#23515A"
@@ -222,24 +258,7 @@ Rectangle {
                 }
             }
 
-            RibbonButton {
-                text: "−"
-                enabled: root.timelineZoom > 1.001
-                onClicked: root.stepZoom(-1)
-            }
-            Text {
-                text: Math.round(root.timelineZoom*100) + "%"
-                color: root.tokens.textSecondary || "#85AAB1"
-                font.pixelSize: 10
-                width: 36
-                height: 24
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignHCenter
-            }
-            RibbonButton { text: "+"; enabled: root.timelineZoom < 7.999; onClicked: root.stepZoom(1) }
-            RibbonButton { text: "Fit"; onClicked: root.setZoom(1) }
-
-            Rectangle { width: 1; height: 18; color: root.tokens.panelBorder || "#23515A" }
+            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.tokens.panelBorder || "#23515A" }
 
             RibbonButton {
                 id: speedButton

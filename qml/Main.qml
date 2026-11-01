@@ -603,7 +603,7 @@ ApplicationWindow {
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 250
+                    Layout.preferredHeight: 280
                     visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
                     onQuickTrimRequested: {
                         prismWindow.stopRangePreview();
