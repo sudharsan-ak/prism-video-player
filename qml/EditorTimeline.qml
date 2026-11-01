@@ -164,30 +164,43 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 10
+            Layout.preferredHeight: 24
+            spacing: 9
             Text {
                 text: "SEGMENT TIMELINE"
-                color: root.tokens.textPrimary || "#fff"
+                color: root.tokens.textPrimary || "#E6F6F6"
                 font.pixelSize: 11
                 font.bold: true
             }
             Item { Layout.fillWidth: true }
-            Text {
-                text: "IN  " + root.timeText(root.startTime)
-                color: root.tokens.accentSolid || "#A89BFF"
-                font.pixelSize: 11
-                font.bold: true
+            Rectangle {
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: countText.implicitWidth+16
+                radius: 12
+                color: root.tokens.panelGlassStrong || "#0C3038"
+                border.color: root.tokens.panelBorder || "#23515A"
+                Text {
+                    id: countText
+                    anchors.centerIn: parent
+                    text: root.displaySegments.length + " segment(s)"
+                    color: root.tokens.textSecondary || "#85AAB1"
+                    font.pixelSize: 10
+                }
             }
-            Text {
-                text: "OUT  " + root.timeText(root.endTime)
-                color: root.tokens.textPrimary || "#fff"
-                font.pixelSize: 11
-                font.bold: true
-            }
-            Text {
-                text: "SELECTED  " + root.timeText(root.endTime - root.startTime)
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 11
+            Rectangle {
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: editedTimeText.implicitWidth+18
+                radius: 12
+                color: root.tokens.panelGlassStrong || "#0C3038"
+                border.color: root.tokens.panelBorder || "#23515A"
+                Text {
+                    id: editedTimeText
+                    anchors.centerIn: parent
+                    text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
+                    color: root.tokens.accentSolid || "#29C7AC"
+                    font.pixelSize: 10
+                    font.bold: true
+                }
             }
         }
 
@@ -197,7 +210,7 @@ Rectangle {
             font.pixelSize: 10
             color: root.tokens.textMuted || "#638C96"
             wrapMode: Text.WordWrap
-            text: "Move IN and OUT on the thumbnails, then Split selection. Click a segment to select it. The playhead stays independent."
+            text: "Move IN and OUT on the thumbnails, then Split selection. Soft Delete shortens the edited playback clock; Remove Gap closes the visible space. The playhead stays independent."
         }
 
         // One interaction toolbar above the time ruler, matching HTML.
@@ -463,7 +476,8 @@ Rectangle {
                 id: inHandle
                 width: 14; height: frameTrack.height
                 x: frameTrack.x + Math.max(0, Math.min(frameTrack.width-width,
-                    root.startTime/Math.max(root.duration,0.001)*frameTrack.width-width/2))
+                    root.startTime/Math.max(root.duration,0.001)*frameTrack.width-width/2 -
+                    (Math.abs(root.endTime-root.startTime)<0.001 ? width/2 : 0)))
                 y: frameTrack.y; radius: 4; z: 12
                 color: root.tokens.accentSolid || "#29C7AC"
                 border.color: root.tokens.textPrimary || "#fff"
@@ -481,7 +495,8 @@ Rectangle {
                 id: outHandle
                 width: 14; height: frameTrack.height
                 x: frameTrack.x + Math.max(0, Math.min(frameTrack.width-width,
-                    root.endTime/Math.max(root.duration,0.001)*frameTrack.width-width/2))
+                    root.endTime/Math.max(root.duration,0.001)*frameTrack.width-width/2 +
+                    (Math.abs(root.endTime-root.startTime)<0.001 ? width/2 : 0)))
                 y: frameTrack.y; radius: 4; z: 13
                 color: root.tokens.accentSolid || "#29C7AC"
                 border.color: root.tokens.textPrimary || "#fff"
