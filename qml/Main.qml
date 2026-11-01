@@ -661,6 +661,10 @@ ApplicationWindow {
             if (prismWindow.fullscreenMode)
                 fullscreenOverlay.notifyActivity();
         }
+        onDoubleClicked: {
+            if (prismWindow.editMode) prismWindow.toggleNormalEditPlayback();
+            else playerController.togglePause();
+        }
         onSingleClicked: {
             // Single click never touches playback - only toggles the
             // floating overlay's visibility in fullscreen, per explicit
