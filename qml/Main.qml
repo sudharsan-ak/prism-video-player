@@ -600,7 +600,7 @@ ApplicationWindow {
             EditorPanel {
                 id: editorPanel
                 Layout.fillHeight: true
-                Layout.preferredWidth: 288
+                Layout.preferredWidth: 305
                 visible: prismWindow.editMode
                 sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
                 sourcePath: prismWindow.editSourcePath
@@ -609,6 +609,9 @@ ApplicationWindow {
                 duration: editCuts.keptDuration
                 segmented: editCuts.hasCuts
                 editedDuration: editCuts.keptDuration
+                originalDuration: editCuts.sourceDuration
+                visualDuration: editCuts.visualDuration
+                previewTime: editCuts.sourceToKept(videoSurface.mpv ? videoSurface.mpv.position : 0)
                 segmentCount: editCuts.keptRanges.length
                 segmentItems: editCuts.segments
                 selectedSegmentId: editCuts.selectedId
