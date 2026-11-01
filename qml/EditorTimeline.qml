@@ -218,7 +218,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: childrenRect.height
             spacing: 5
-            component Action: Button {
+            component EditButton: Button {
                 id: action
                 font.pixelSize: 10
                 padding: 7
@@ -238,11 +238,11 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
-            Action {
+            EditButton {
                 text: root.rangePlaying ? "❚❚ Pause range    R" : "▶ Play range    R"
                 onClicked: root.togglePlaybackRequested()
             }
-            Action {
+            EditButton {
                 text: "⇥ Jump next    J"
                 enabled: root.hasNextKept
                 onClicked: root.jumpNextRequested()
@@ -269,38 +269,38 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
-            Action {
+            EditButton {
                 text: "▧ Soft Delete    Del"
                 enabled: root.canSoftDelete
                 onClicked: root.softDeleteRequested()
             }
-            Action {
+            EditButton {
                 text: "↩ Restore"
                 enabled: root.selectedRemoved
                 onClicked: root.restoreSegmentRequested()
             }
-            Action {
+            EditButton {
                 text: "⌦ Remove Gap"
                 enabled: root.selectedRemoved && !root.selectedCollapsed
                 onClicked: root.removeGapRequested(root.selectedSegmentId)
             }
-            Action { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
-            Action { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
-            Action {
+            EditButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
+            EditButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
+            EditButton {
                 text: "Set IN"
                 onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12))
             }
-            Action {
+            EditButton {
                 text: "Set OUT"
                 onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12))
             }
-            Action { text: "Reset range"; onClicked: root.resetRequested() }
-            Action {
+            EditButton { text: "Reset range"; onClicked: root.resetRequested() }
+            EditButton {
                 text: "✧ Try example"
                 enabled: root.sourceDuration > 1.0
                 onClicked: root.exampleRequested()
             }
-            Action { text: "Reset all"; onClicked: root.resetAllRequested() }
+            EditButton { text: "Reset all"; onClicked: root.resetAllRequested() }
         }
 
         Item {
@@ -465,7 +465,7 @@ Rectangle {
                     x: (root.startTime/Math.max(root.duration,0.001)) * parent.width
                     width: Math.max(0, ((root.endTime/Math.max(root.duration,0.001)) - (root.startTime/Math.max(root.duration,0.001))) * parent.width)
                     height: parent.height
-                    color: root.tokens.accentTint || "#334466"
+                    color: "#3029C7AC"
                     border.color: root.tokens.accentSolid || "#A89BFF"
                     border.width: 2
                 }
@@ -576,7 +576,7 @@ Rectangle {
                 onCanceled: dragActivated = false
             }
 
-            // Above RangeSlider and selection drag layer so this button
+            // Above the filmstrip selection and drag layer so this button
             // remains clickable even when the excluded gap is selected.
             Repeater {
                 model: root.displaySegments
