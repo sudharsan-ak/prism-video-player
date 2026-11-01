@@ -100,7 +100,7 @@ ApplicationWindow {
             return;
         }
         const ok = exportQueue.queueMp4(editSourcePath, editStart, editEnd,
-                                        destination, 1.0, 100, 0, 0, 0, 1, 1);
+                                        destination, editSpeed, editVolumePercent, 0, 0, 0, 1, 1);
         toast.show(ok ? "Trimmed MP4 copy added to export queue." : exportQueue.lastError, !ok);
     }
 
@@ -127,9 +127,10 @@ ApplicationWindow {
             exportQueue.hasOutstanding || videoExportController.busy)
             return;
         stopRangePreview();
-        // No advanced cuts, crop, rotation, speed or gain are applied by Quick Trim.
+        // Quick Trim applies only visible range, speed and volume.
+        // Hidden advanced cuts, crop and rotation are intentionally ignored.
         if (!videoExportController.startReplaceTrim(editSourcePath,editStart,editEnd,
-                                                     1.0,100,0,0,0,1,1))
+                                                     editSpeed,editVolumePercent,0,0,0,1,1))
             toast.show(videoExportController.error || "Could not start replacement.", true);
     }
 
@@ -142,7 +143,7 @@ ApplicationWindow {
         }
         stopRangePreview();
         playerController.seek(editStart);
-        playerController.setSpeed(1.0);
+        playerController.setSpeed(editSpeed);
         previewSelectionPlaying = true;
         playerController.setPaused(false);
     }
@@ -544,7 +545,7 @@ ApplicationWindow {
                 QuickTrimTimeline {
                     id: quickTrimTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 245
+                    Layout.preferredHeight: 166
                     visible: prismWindow.editMode && prismWindow.editorScreen === "quick"
                     enabled: exportQueue.canQueue
                     duration: editCuts.sourceDuration
@@ -573,10 +574,14 @@ ApplicationWindow {
                         prismWindow.stopRangePreview();
                         playerController.seek(prismWindow.editStart);
                     }
-                    onMuteRequested: prismWindow.setEditVolume(
-                        prismWindow.editVolumePercent===0 ?
-                        Math.max(1,prismWindow.lastEditAudibleVolume) : 0)
-                    audioMuted: prismWindow.editVolumePercent === 0
+                    audioVolumePercent: prismWindow.editVolumePercent
+                    lastAudibleVolume: prismWindow.lastEditAudibleVolume
+                    playbackSpeed: prismWindow.editSpeed
+                    onSpeedEdited: function(speed) {
+                        prismWindow.editSpeed = speed;
+                        playerController.setSpeed(speed);
+                    }
+                    onVolumeEdited: function(percent) { prismWindow.setEditVolume(percent); }
                     onResetRequested: {
                         prismWindow.stopRangePreview();
                         prismWindow.editStart=0;

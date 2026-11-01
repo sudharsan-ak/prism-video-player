@@ -101,7 +101,8 @@ Rectangle {
         }
         contentItem: Text {
             text: action.text
-            font: action.font
+            font.family: action.font.family
+            font.pixelSize: action.font.pixelSize
             color: root.tokens.textPrimary || "#E6F6F6"
             opacity: action.enabled ? 1 : .35
             horizontalAlignment: Text.AlignHCenter
@@ -162,18 +163,28 @@ Rectangle {
                     Button {
                         id: previewPlay
                         width: 33; height: 33
-                        text: root.previewPlaying ? "❚❚" : "▶"
+                        text: root.previewPlaying ? "Pause" : "Play"
                         onClicked: root.normalPlaybackRequested()
                         background: Rectangle {
                             radius: 18
                             color: root.tokens.accentSolid || "#29C7AC"
                         }
-                        contentItem: Text {
-                            text: previewPlay.text
-                            color: "#071D1D"
-                            font.pixelSize: 15
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: Item {
+                            Text {
+                                anchors.centerIn: parent
+                                anchors.horizontalCenterOffset: 1
+                                visible: !root.previewPlaying
+                                text: "▶"
+                                font.pixelSize: 15
+                                color: "#071D1D"
+                            }
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
+                                visible: root.previewPlaying
+                                Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                                Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                            }
                         }
                     }
                     Text {
@@ -588,7 +599,8 @@ Rectangle {
                     }
                     contentItem: Text {
                         text: gapAction.text
-                        font: gapAction.font
+                        font.family: gapAction.font.family
+                        font.pixelSize: gapAction.font.pixelSize
                         color: root.tokens.textPrimary || "#fff"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
