@@ -79,6 +79,7 @@ QVariantList ExportQueueController::jobs() const
         item.insert(QStringLiteral("progress"), job.progress);
         item.insert(QStringLiteral("start"), job.start);
         item.insert(QStringLiteral("end"), job.end);
+        item.insert(QStringLiteral("segments"), job.ranges.size());
         item.insert(QStringLiteral("speed"), job.speed);
         item.insert(QStringLiteral("mute"), job.audioVolumePercent == 0);
         item.insert(QStringLiteral("audioVolume"), job.audioVolumePercent);
@@ -170,10 +171,27 @@ bool ExportQueueController::queueGif(const QString &source, double start, double
                    quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
+bool ExportQueueController::queueSegments(const QString &source, const QVariantList &ranges,
+                                          const QUrl &destination, bool gif, double speed,
+                                          int audioVolumePercent, int quarterTurns,
+                                          double cropX, double cropY, double cropWidth, double cropHeight)
+{
+    if (ranges.isEmpty()) {
+        m_lastError = QStringLiteral("No playable segments selected.");
+        emit jobsChanged();
+        return false;
+    }
+    return enqueue(source, ranges.first().toMap().value(QStringLiteral("start")).toDouble(),
+                   ranges.last().toMap().value(QStringLiteral("end")).toDouble(),
+                   destination, speed, audioVolumePercent, gif, quarterTurns,
+                   cropX, cropY, cropWidth, cropHeight, ranges);
+}
+
 bool ExportQueueController::enqueue(const QString &source, double start, double end,
                                     const QUrl &destination, double speed, int audioVolumePercent, bool gif,
                                     int quarterTurns, double cropX, double cropY,
-                                    double cropWidth, double cropHeight)
+                                    double cropWidth, double cropHeight,
+                                    const QVariantList &ranges)
 {
     m_lastError.clear();
     auto reject = [this](const QString &error) {
@@ -210,6 +228,19 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
         output.exists() || isReserved(output.absoluteFilePath()))
         return reject(QStringLiteral("The output name already exists or is queued. Choose another name."));
 
+    if (!ranges.isEmpty()) {
+        double prev = -1;
+        for (const QVariant &v : ranges) {
+            const QVariantMap m = v.toMap();
+            const double a=m.value(QStringLiteral("start")).toDouble();
+            const double b=m.value(QStringLiteral("end")).toDouble();
+            if (!m.contains(QStringLiteral("start")) || !m.contains(QStringLiteral("end")) ||
+                !std::isfinite(a) || !std::isfinite(b) || a < 0 || b-a < 0.05 ||
+                a < prev-0.0001 || ranges.size() > 100)
+                return reject(QStringLiteral("Invalid or overlapping source segments."));
+            prev=b;
+        }
+    }
     Job job;
     job.id = m_nextId++;
     job.source = input.absoluteFilePath();
@@ -217,6 +248,7 @@ bool ExportQueueController::enqueue(const QString &source, double start, double 
     job.format = gif ? QStringLiteral("GIF") : QStringLiteral("MP4");
     job.start = start;
     job.end = end;
+    job.ranges = ranges;
     job.speed = speed;
     job.audioVolumePercent = audioVolumePercent;
     job.quarterTurns = quarterTurns;
@@ -265,8 +297,14 @@ void ExportQueueController::startNext()
         m_activeId = job.id;
         emit jobsChanged();
 
-        const bool started = job.format == QStringLiteral("GIF")
-            ? m_worker->startGif(job.source, job.start, job.end,
+        const bool started = !job.ranges.isEmpty()
+            ? m_worker->startSegments(job.source, job.ranges,
+                  QUrl::fromLocalFile(job.output),
+                  job.format == QStringLiteral("GIF"), job.speed, job.audioVolumePercent,
+                  job.mp4Preset, job.gifPreset, job.quarterTurns,
+                  job.cropX, job.cropY, job.cropWidth, job.cropHeight)
+            : job.format == QStringLiteral("GIF")
+                ? m_worker->startGif(job.source, job.start, job.end,
                   QUrl::fromLocalFile(job.output), job.speed, job.gifPreset,
                   job.quarterTurns, job.cropX, job.cropY, job.cropWidth, job.cropHeight)
             : m_worker->startTrim(job.source, job.start, job.end,
