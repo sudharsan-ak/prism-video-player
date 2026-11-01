@@ -113,8 +113,11 @@ QtObject {
     }
     function removeGap() {
         if (!selected || !selected.removed || selected.collapsed) return false;
+        const next=segments.find(s=>!s.removed && s.start>=selected.end-0.00001);
+        const before=segments.slice().reverse().find(s=>!s.removed && s.end<=selected.start+0.00001);
         commit(segments.map(s => s.id === selectedId ?
-               Object.assign({},s,{collapsed:true}) : s), selectedId, nextId);
+               Object.assign({},s,{collapsed:true}) : s),
+               next ? next.id : before ? before.id : selectedId, nextId);
         return true;
     }
     function restore() {
@@ -122,6 +125,13 @@ QtObject {
         commit(segments.map(s => s.id === selectedId ?
                Object.assign({},s,{removed:false,collapsed:false}) : s), selectedId, nextId);
         return true;
+    }
+    function resetEdits() {
+        if (segments.length === 1 && !segments[0].removed && !segments[0].collapsed)
+            return;
+        const id=nextId;
+        commit([{id:id,start:0,end:sourceDuration,removed:false,collapsed:false}],
+               id,id+1);
     }
     function undo() {
         if (!canUndo) return;

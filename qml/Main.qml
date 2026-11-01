@@ -482,7 +482,7 @@ ApplicationWindow {
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 255
+                    Layout.preferredHeight: 365
                     visible: prismWindow.editMode
                     enabled: exportQueue.canQueue
                     duration: editCuts.visualDuration
@@ -495,6 +495,10 @@ ApplicationWindow {
                     segmentWarning: editCuts.warning
                     canUndo: editCuts.canUndo
                     canRedo: editCuts.canRedo
+                    selectedRemoved: editCuts.selected ? editCuts.selected.removed : false
+                    selectedCollapsed: editCuts.selected ? editCuts.selected.collapsed : false
+                    canSoftDelete: editCuts.selected && !editCuts.selected.removed &&
+                        editCuts.keptRanges.length > 1
                     hasNextKept: editCuts.nextKeptStart(
                         videoSurface.mpv ? videoSurface.mpv.position : 0) >= 0
                     position: editCuts.sourceToVisual(videoSurface.mpv ? videoSurface.mpv.position : 0)
@@ -504,7 +508,8 @@ ApplicationWindow {
                     audioVolumePercent: prismWindow.editVolumePercent
                     lastAudibleVolume: prismWindow.lastEditAudibleVolume
                     onAudioVolumeEdited: function(percent) { prismWindow.setEditVolume(percent); }
-                    previewPlaying: prismWindow.previewSelectionPlaying &&
+                    previewPlaying: (prismWindow.previewSelectionPlaying ||
+                        prismWindow.normalEditPlaybackPlaying) &&
                         videoSurface.mpv && !videoSurface.mpv.paused
                     onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
                     onSpeedEdited: function(value) {
@@ -557,6 +562,17 @@ ApplicationWindow {
                     onRedoRequested: { prismWindow.stopRangePreview(); editCuts.redo(); }
                     onJumpNextRequested: prismWindow.jumpNextKept()
                     onNormalPlaybackRequested: prismWindow.toggleNormalEditPlayback()
+                    onBeginningRequested: {
+                        prismWindow.stopRangePreview();
+                        if (editCuts.keptRanges.length > 0)
+                            playerController.seek(editCuts.keptRanges[0].start);
+                    }
+                    onResetAllRequested: {
+                        prismWindow.stopRangePreview();
+                        editCuts.resetEdits();
+                        prismWindow.editStart = 0;
+                        prismWindow.editEnd = editCuts.sourceDuration;
+                    }
                     onSegmentSelected: function(id) { editCuts.select(id); }
                     onSegmentSelectedAt: function(t) {
                         const source=editCuts.visualToSource(t);
