@@ -53,6 +53,7 @@ Rectangle {
     }
 
     signal closeRequested()
+    signal quickTrimRequested()
     signal exportRequested()
     signal exportGifRequested()
     signal replaceModeRequested()
@@ -179,6 +180,25 @@ Rectangle {
                 color: root.tokens.textPrimary || "white"
                 font.pixelSize: 13
                 font.bold: true
+            }
+            Button {
+                id: backToTrim
+                text: "← Quick Trim"
+                font.pixelSize: 10
+                padding: 6
+                onClicked: root.quickTrimRequested()
+                background: Rectangle {
+                    radius: 6
+                    color: backToTrim.hovered ? (root.tokens.accentTint || "#124B4C")
+                                            : (root.tokens.panelGlassStrong || "#113840")
+                    border.color: root.tokens.panelBorder || "#23515A"
+                }
+                contentItem: Text {
+                    text: backToTrim.text
+                    color: root.tokens.textPrimary || "#FFFFFF"
+                    font.pixelSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             Button {
                 id: closeEditorButton

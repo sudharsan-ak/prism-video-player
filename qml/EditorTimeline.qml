@@ -7,13 +7,15 @@ import QtQuick.Layouts
 // scrubs mpv position; export cuts at the exact chosen times.
 Rectangle {
     id: root
-    height: 365
+    height: 335
     color: tokens.panelGlass || "#20202B"
     border.color: tokens.panelBorder || "transparent"
     border.width: 1
 
     property var tokens: themeController.tokens
     property real duration: 0
+    property real timelineZoom: 1.0
+    signal quickTrimRequested()
     property real sourceDuration: 0
     property var displaySegments: []
     property int selectedSegmentId: -1
@@ -69,6 +71,42 @@ Rectangle {
             return 0;
         return Math.max(0, Math.min(root.duration,
             pixelX * root.duration / frameTrack.width));
+    }
+
+    function setZoom(value) {
+        timelineZoom = Math.max(1,Math.min(8,value));
+        Qt.callLater(function() {
+            // Keep the playhead visible without seeking or changing cuts.
+            const x=root.position/Math.max(.001,root.duration)*timelineViewport.contentWidth-
+                    timelineViewport.width/2;
+            timelineViewport.contentX=Math.max(0,Math.min(timelineViewport.contentWidth-timelineViewport.width,x));
+        });
+    }
+    function stepZoom(direction) {
+        const stops=[1,1.25,1.5,2,3,4,6,8];
+        let i=stops.findIndex(z=>z>=root.timelineZoom-.001);
+        if(i<0)i=0;
+        setZoom(stops[Math.max(0,Math.min(stops.length-1,i+direction))]);
+    }
+    component RibbonButton: Button {
+        id: action
+        font.pixelSize: 10
+        padding: 7
+        background: Rectangle {
+            radius: 6
+            color: action.hovered ? (root.tokens.accentTint || "#124B4C")
+                                  : (root.tokens.panelGlassStrong || "#113840")
+            border.color: root.tokens.panelBorder || "#23515A"
+            border.width: 1
+        }
+        contentItem: Text {
+            text: action.text
+            font: action.font
+            color: root.tokens.textPrimary || "#E6F6F6"
+            opacity: action.enabled ? 1 : .35
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
     }
 
     function timeText(seconds) {
@@ -167,15 +205,17 @@ Rectangle {
             Layout.preferredHeight: 24
             spacing: 9
             Text {
-                text: "SEGMENT TIMELINE"
+                text: "ADVANCED EDITOR"
                 color: root.tokens.textPrimary || "#E6F6F6"
                 font.pixelSize: 11
                 font.bold: true
             }
+            RibbonButton { text: "← Quick Trim"; onClicked: root.quickTrimRequested() }
             Item { Layout.fillWidth: true }
             Rectangle {
                 Layout.preferredHeight: 24
-                Layout.preferredWidth: countText.implicitWidth+16
+                visible: root.width >= 820
+                Layout.preferredWidth: visible ? countText.implicitWidth+16 : 0
                 radius: 12
                 color: root.tokens.panelGlassStrong || "#0C3038"
                 border.color: root.tokens.panelBorder || "#23515A"
@@ -189,7 +229,8 @@ Rectangle {
             }
             Rectangle {
                 Layout.preferredHeight: 24
-                Layout.preferredWidth: editedTimeText.implicitWidth+18
+                visible: root.width >= 950
+                Layout.preferredWidth: visible ? editedTimeText.implicitWidth+18 : 0
                 radius: 12
                 color: root.tokens.panelGlassStrong || "#0C3038"
                 border.color: root.tokens.panelBorder || "#23515A"
@@ -202,111 +243,51 @@ Rectangle {
                     font.bold: true
                 }
             }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 24
-            font.pixelSize: 10
-            color: root.tokens.textMuted || "#638C96"
-            wrapMode: Text.WordWrap
-            text: "Move IN and OUT on the thumbnails, then Split selection. Soft Delete shortens the edited playback clock; Remove Gap closes the visible space. The playhead stays independent."
-        }
-
-        // One interaction toolbar above the time ruler, matching HTML.
-        Flow {
-            Layout.fillWidth: true
-            Layout.preferredHeight: childrenRect.height
-            spacing: 5
-            component EditButton: Button {
-                id: action
+            RibbonButton {
+                text: "−"
+                enabled: root.timelineZoom > 1.001
+                onClicked: root.stepZoom(-1)
+            }
+            Text {
+                text: Math.round(root.timelineZoom*100) + "%"
+                color: root.tokens.textSecondary || "#85AAB1"
                 font.pixelSize: 10
-                padding: 7
-                background: Rectangle {
-                    radius: 7
-                    color: action.hovered ? (root.tokens.accentTint || "#124B4C") :
-                         (root.tokens.panelGlassStrong || "#113840")
-                    border.color: root.tokens.panelBorder || "#23515A"
-                    border.width: 1
-                }
-                contentItem: Text {
-                    text: action.text
-                    font: action.font
-                    color: root.tokens.textPrimary || "#E6F6F6"
-                    opacity: action.enabled ? 1 : .35
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                Layout.preferredWidth: 36
+                horizontalAlignment: Text.AlignHCenter
             }
-            EditButton {
-                text: root.rangePlaying ? "❚❚ Pause range    R" : "▶ Play range    R"
-                onClicked: root.togglePlaybackRequested()
-            }
-            EditButton {
-                text: "⇥ Jump next    J"
-                enabled: root.hasNextKept
-                onClicked: root.jumpNextRequested()
-            }
-            Button {
-                id: splitButton
-                text: "✂ Split selection    S"
-                font.pixelSize: 10
-                padding: 7
-                enabled: root.endTime-root.startTime >= .05
-                onClicked: root.splitRequested()
-                background: Rectangle {
-                    radius: 7
-                    color: splitButton.enabled ?
-                          (root.tokens.accentSolid || "#29C7AC") :
-                          (root.tokens.panelGlassStrong || "#113840")
-                }
-                contentItem: Text {
-                    text: splitButton.text
-                    font: splitButton.font
-                    color: splitButton.enabled ? (root.tokens.videoCardBackground || "#06171D") :
-                                                (root.tokens.textMuted || "#638C96")
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            EditButton {
-                text: "▧ Soft Delete    Del"
-                enabled: root.canSoftDelete
-                onClicked: root.softDeleteRequested()
-            }
-            EditButton {
-                text: "↩ Restore"
-                enabled: root.selectedRemoved
-                onClicked: root.restoreSegmentRequested()
-            }
-            EditButton {
-                text: "⌦ Remove Gap"
-                enabled: root.selectedRemoved && !root.selectedCollapsed
-                onClicked: root.removeGapRequested(root.selectedSegmentId)
-            }
-            EditButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
-            EditButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
-            EditButton {
-                text: "Set IN"
-                onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12))
-            }
-            EditButton {
-                text: "Set OUT"
-                onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12))
-            }
-            EditButton { text: "Reset range"; onClicked: root.resetRequested() }
-            EditButton {
-                text: "✧ Try example"
-                enabled: root.sourceDuration > 1.0
-                onClicked: root.exampleRequested()
-            }
-            EditButton { text: "Reset all"; onClicked: root.resetAllRequested() }
+            RibbonButton { text: "+"; enabled: root.timelineZoom < 7.999; onClicked: root.stepZoom(1) }
+            RibbonButton { text: "Fit"; onClicked: root.setZoom(1) }
         }
 
-        Item {
-            id: timelineRuler
+        // Compact advanced editing, actions are grouped beneath the timeline.
+        Flickable {
+            id: timelineViewport
             Layout.fillWidth: true
-            Layout.preferredHeight: 15
+            Layout.preferredHeight: 127
+            clip: true
+            interactive: true
+            boundsBehavior: Flickable.StopAtBounds
+            contentWidth: Math.max(width,width*root.timelineZoom)
+            contentHeight: 116
+            ScrollBar.horizontal: ScrollBar { policy: root.timelineZoom>1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+            WheelHandler {
+                target: null
+                onWheel: function(event) {
+                    if(root.timelineZoom>1) {
+                        const next=timelineViewport.contentX-event.angleDelta.y/120*55;
+                        timelineViewport.contentX=Math.max(0,Math.min(timelineViewport.contentWidth-timelineViewport.width,next));
+                        event.accepted=true;
+                    }
+                }
+            }
+            Item {
+                id: timelineContent
+                width: timelineViewport.contentWidth
+                height: 116
+                Item {
+                    id: timelineRuler
+                    width: parent.width
+                    height: 15
             Repeater {
                 model: 13
                 Item {
@@ -344,9 +325,10 @@ Rectangle {
             }
         }
 
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 90
+                Item {
+                    width: parent.width
+                    height: 90
+                    y: 23
 
             // Real thumbnail images are generated asynchronously by FFmpeg.
             Rectangle {
@@ -485,6 +467,7 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "Ⅰ"; font.pixelSize: 11; color: "#071D1D" }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    preventStealing: true
                     onPositionChanged: function(mouse) {
                         if (pressed) root.startTimeEdited(root.seekTimeAtPixel(
                             mapToItem(frameTrack,mouse.x,mouse.y).x));
@@ -504,6 +487,7 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "Ⅱ"; font.pixelSize: 11; color: "#071D1D" }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    preventStealing: true
                     onPositionChanged: function(mouse) {
                         if (pressed) root.endTimeEdited(root.seekTimeAtPixel(
                             mapToItem(frameTrack,mouse.x,mouse.y).x));
@@ -682,6 +666,8 @@ Rectangle {
                     onReleased: root.seekRequested(scrubSeconds)
                 }
             }
+                }
+            }
         }
 
         RowLayout {
@@ -703,6 +689,37 @@ Rectangle {
                 text: root.timeText(root.keptDuration)
                 font.pixelSize: 10
                 color: root.tokens.textMuted || "#888"
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.max(leftActions.childrenRect.height,rightActions.childrenRect.height)
+            spacing: 9
+            Flow {
+                id: leftActions
+                Layout.fillWidth: true
+                Layout.preferredHeight: childrenRect.height
+                spacing: 5
+                RibbonButton { text: "✂ Split  S"; enabled: root.endTime-root.startTime >= .05; onClicked: root.splitRequested() }
+                RibbonButton { text: "Soft Delete  Del"; enabled: root.canSoftDelete; onClicked: root.softDeleteRequested() }
+                RibbonButton { text: "Restore"; enabled: root.selectedRemoved; onClicked: root.restoreSegmentRequested() }
+                RibbonButton { text: "Remove Gap"; enabled: root.selectedRemoved && !root.selectedCollapsed; onClicked: root.removeGapRequested(root.selectedSegmentId) }
+                RibbonButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
+                RibbonButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
+            }
+            Flow {
+                id: rightActions
+                Layout.fillWidth: true
+                Layout.preferredHeight: childrenRect.height
+                spacing: 5
+                RibbonButton { text: root.rangePlaying ? "❚❚ Range  R" : "▶ Range  R"; onClicked: root.togglePlaybackRequested() }
+                RibbonButton { text: "⇥ Next  J"; enabled: root.hasNextKept; onClicked: root.jumpNextRequested() }
+                RibbonButton { text: "Set IN"; onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12)) }
+                RibbonButton { text: "Set OUT"; onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12)) }
+                RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
+                RibbonButton { text: "Example"; enabled: root.sourceDuration>1.0; onClicked: root.exampleRequested() }
+                RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
             }
         }
 

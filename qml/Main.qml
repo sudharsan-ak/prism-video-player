@@ -37,6 +37,8 @@ ApplicationWindow {
     }
 
     property bool editMode: false
+    // Edit always opens in the simple trim screen. Advanced cuts are session state.
+    property string editorScreen: "quick"
     property string editSourcePath: ""
     property real editStart: 0
     property real editEnd: 0
@@ -87,6 +89,64 @@ ApplicationWindow {
         playerController.setSpeed(editSpeed);
         playerController.setPaused(false);
     }
+    // Quick Trim deliberately exports source IN/OUT only, even when a user
+    // previously made advanced cuts during this editing session.
+    function queueQuickTrimCopy() {
+        if (!editMode || editorScreen !== "quick" || !exportQueue.canQueue)
+            return;
+        const destination = exportQueue.suggestedOutputUrl(editSourcePath, false);
+        if (!destination || destination.toString().length === 0) {
+            toast.show("Could not find an available copy filename.", true);
+            return;
+        }
+        const ok = exportQueue.queueMp4(editSourcePath, editStart, editEnd,
+                                        destination, 1.0, 100, 0, 0, 0, 1, 1);
+        toast.show(ok ? "Trimmed MP4 copy added to export queue." : exportQueue.lastError, !ok);
+    }
+
+    function requestQuickTrimSave() {
+        if (!editMode || editorScreen !== "quick")
+            return;
+        if (!editSourcePath.toLowerCase().endsWith(".mp4")) {
+            toast.show("Overwriting the original is supported only for MP4 files. Use Save as Copy.", true);
+            return;
+        }
+        if (exportQueue.hasOutstanding || videoExportController.busy) {
+            toast.show("Finish queued exports before replacing the original.", true);
+            return;
+        }
+        if (editEnd - editStart < 0.1) {
+            toast.show("Select at least 0.1 seconds to save.", true);
+            return;
+        }
+        quickSaveConfirm.open();
+    }
+
+    function overwriteQuickTrim() {
+        if (!editMode || editorScreen !== "quick" ||
+            exportQueue.hasOutstanding || videoExportController.busy)
+            return;
+        stopRangePreview();
+        // No advanced cuts, crop, rotation, speed or gain are applied by Quick Trim.
+        if (!videoExportController.startReplaceTrim(editSourcePath,editStart,editEnd,
+                                                     1.0,100,0,0,0,1,1))
+            toast.show(videoExportController.error || "Could not start replacement.", true);
+    }
+
+    function toggleQuickTrimPlayback() {
+        if (!editMode || editorScreen !== "quick" || editEnd-editStart < 0.1)
+            return;
+        if (previewSelectionPlaying && videoSurface.mpv && !videoSurface.mpv.paused) {
+            stopRangePreview();
+            return;
+        }
+        stopRangePreview();
+        playerController.seek(editStart);
+        playerController.setSpeed(1.0);
+        previewSelectionPlaying = true;
+        playerController.setPaused(false);
+    }
+
     function queueEditSegments(gif,destination) {
         if (editCuts.hasCuts)
             return exportQueue.queueSegments(editSourcePath,editCuts.keptRanges,
@@ -247,6 +307,7 @@ ApplicationWindow {
         editStart = 0;
         editEnd = mpv.duration;
         editCuts.reset(mpv.duration);
+        editorScreen = "quick";
         previewSelectionPlaying = false;
         normalEditPlaybackPlaying = false;
         playerController.setPaused(true);
@@ -269,6 +330,7 @@ ApplicationWindow {
         restorePlaybackAudio();
         restorePlaybackRotation();
         editMode = false;
+        editorScreen = "quick";
         videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
     }
@@ -479,11 +541,64 @@ ApplicationWindow {
                     mpv: videoSurface.mpv
                 }
 
+                QuickTrimTimeline {
+                    id: quickTrimTimeline
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 245
+                    visible: prismWindow.editMode && prismWindow.editorScreen === "quick"
+                    enabled: exportQueue.canQueue
+                    duration: editCuts.sourceDuration
+                    position: videoSurface.mpv ? videoSurface.mpv.position : 0
+                    startTime: prismWindow.editStart
+                    endTime: prismWindow.editEnd
+                    playing: prismWindow.previewSelectionPlaying &&
+                             videoSurface.mpv && !videoSurface.mpv.paused
+                    sourceIsMp4: prismWindow.editSourcePath.toLowerCase().endsWith(".mp4")
+                    advancedCutsExist: editCuts.hasCuts
+                    onStartTimeEdited: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editStart = Math.max(0,Math.min(seconds,prismWindow.editEnd-.1));
+                    }
+                    onEndTimeEdited: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editEnd = Math.min(editCuts.sourceDuration,
+                            Math.max(seconds,prismWindow.editStart+.1));
+                    }
+                    onSeekRequested: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        playerController.seek(seconds);
+                    }
+                    onPlayRequested: prismWindow.toggleQuickTrimPlayback()
+                    onBeginningRequested: {
+                        prismWindow.stopRangePreview();
+                        playerController.seek(prismWindow.editStart);
+                    }
+                    onMuteRequested: prismWindow.setEditVolume(
+                        prismWindow.editVolumePercent===0 ?
+                        Math.max(1,prismWindow.lastEditAudibleVolume) : 0)
+                    audioMuted: prismWindow.editVolumePercent === 0
+                    onResetRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editStart=0;
+                        prismWindow.editEnd=editCuts.sourceDuration;
+                    }
+                    onAdvancedRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editorScreen="advanced";
+                    }
+                    onCopyRequested: prismWindow.queueQuickTrimCopy()
+                    onSaveRequested: prismWindow.requestQuickTrimSave()
+                }
+
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 365
-                    visible: prismWindow.editMode
+                    Layout.preferredHeight: 335
+                    visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+                    onQuickTrimRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editorScreen = "quick";
+                    }
                     enabled: exportQueue.canQueue
                     duration: editCuts.visualDuration
                     sourceDuration: editCuts.sourceDuration
@@ -609,7 +724,7 @@ ApplicationWindow {
                 id: editorPanel
                 Layout.fillHeight: true
                 Layout.preferredWidth: 305
-                visible: prismWindow.editMode
+                visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
                 sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
                 sourcePath: prismWindow.editSourcePath
                 startTime: prismWindow.editStart
@@ -647,6 +762,10 @@ ApplicationWindow {
                 }
                 onAudioVolumeEdited: function(value) { prismWindow.setEditVolume(value); }
                 onCloseRequested: prismWindow.leaveEditing()
+                onQuickTrimRequested: {
+                    prismWindow.stopRangePreview();
+                    prismWindow.editorScreen = "quick";
+                }
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
                 onReplaceModeRequested: replaceModeConfirmDialog.open()
@@ -694,7 +813,8 @@ ApplicationWindow {
                 fullscreenOverlay.notifyActivity();
         }
         onDoubleClicked: {
-            if (prismWindow.editMode) prismWindow.toggleNormalEditPlayback();
+            if (prismWindow.editMode && prismWindow.editorScreen === "quick") prismWindow.toggleQuickTrimPlayback();
+            else if (prismWindow.editMode) prismWindow.toggleNormalEditPlayback();
             else playerController.togglePause();
         }
         onSingleClicked: {
@@ -1138,6 +1258,32 @@ ApplicationWindow {
             }
         }
     }
+    // Destructive save is intentionally explicit and only applies simple source IN/OUT.
+    Dialog {
+        id: quickSaveConfirm
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(430, prismWindow.width - 36)
+        title: "Replace original MP4?"
+        standardButtons: Dialog.Yes | Dialog.Cancel
+        onAccepted: prismWindow.overwriteQuickTrim()
+        background: Rectangle {
+            radius: 10
+            color: prismWindow.tokens.panelGlassStrong || "#16272C"
+            border.color: prismWindow.tokens.panelBorder || "#23515A"
+        }
+        contentItem: Text {
+            width: 360
+            wrapMode: Text.WordWrap
+            text: "Save will overwrite the original MP4 with the selected Quick Trim range. " +
+                  "Prism first encodes a separate temporary file, and only replaces " +
+                  "the source after export succeeds. This operation cannot be undone" +
+                  (settingsStore.keepBackupOnReplace ? "; a backup is enabled." : ".")
+            color: prismWindow.tokens.textPrimary || "#FFFFFF"
+            font.pixelSize: 12
+        }
+    }
+
     FileDialog {
         id: trimSaveDialog
         title: "Export trimmed video (new MP4)"
@@ -1213,6 +1359,7 @@ ApplicationWindow {
     Connections {
         target: videoExportController
         function onReplacementPrepared() {
+            prismWindow.editorScreen = "quick";
             prismWindow.previewSelectionPlaying = false;
             playerController.setPaused(true);
             playerController.setSpeed(prismWindow.normalPlaybackSpeed);
@@ -1264,6 +1411,11 @@ ApplicationWindow {
                 !videoSurface.mpv || videoSurface.mpv.paused)
                 return;
             const at=videoSurface.mpv.position;
+            if (prismWindow.editorScreen === "quick") {
+                if (at >= prismWindow.editEnd-0.025)
+                    prismWindow.stopRangePreview();
+                return;
+            }
             if (prismWindow.previewSelectionPlaying && at >= prismWindow.editEnd-0.025) {
                 prismWindow.stopRangePreview();
                 return;
@@ -1289,6 +1441,7 @@ ApplicationWindow {
                 prismWindow.restorePlaybackAudio();
                 prismWindow.restorePlaybackRotation();
                 prismWindow.editMode = false;
+                prismWindow.editorScreen = "quick";
                 videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);
             }
@@ -1300,53 +1453,53 @@ ApplicationWindow {
     Shortcut {
         sequence: "S"
         context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.splitEditSelection()
     }
     Shortcut {
         sequence: "Delete"
         context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.deleteEditSegment()
     }
     Shortcut {
         sequence: "Ctrl+Z"
         context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: { prismWindow.stopRangePreview(); editCuts.undo(); }
     }
     Shortcut {
         sequence: "Ctrl+Shift+Z"
         context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
     }
     Shortcut {
         sequence: "Ctrl+Y"
         context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
     }
 
     Shortcut {
         sequence: "R"; context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.toggleEditPlayback()
     }
     Shortcut {
         sequence: "J"; context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.jumpNextKept()
     }
     Shortcut {
         sequence: "I"; context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.editStart = Math.max(0,Math.min(
             videoSurface.mpv.position,prismWindow.editEnd-.12))
     }
     Shortcut {
         sequence: "O"; context: Qt.WindowShortcut
-        enabled: prismWindow.editMode
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
         onActivated: prismWindow.editEnd = Math.min(editCuts.sourceDuration,
             Math.max(videoSurface.mpv.position,prismWindow.editStart+.12))
     }
@@ -1360,7 +1513,9 @@ ApplicationWindow {
 
         switch (event.key) {
         case Qt.Key_Space:
-            if (prismWindow.editMode)
+            if (prismWindow.editMode && prismWindow.editorScreen === "quick")
+                prismWindow.toggleQuickTrimPlayback();
+            else if (prismWindow.editMode)
                 prismWindow.toggleNormalEditPlayback();
             else
                 playerController.togglePause();
