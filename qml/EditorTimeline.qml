@@ -29,18 +29,16 @@ Rectangle {
     property real endTime: 0
     property real editSpeed: 1.0
     property bool previewPlaying: false
+    property bool rangePlaying: false
     property int audioVolumePercent: 100
     property int lastAudibleVolume: 100
-    onVisibleChanged: {
-        if (!visible)
-            audioVolumePopup.close();
-    }
     property bool sourceIsMp4: false
     property bool selectedRemoved: false
     property bool selectedCollapsed: false
     property bool canSoftDelete: false
     signal beginningRequested()
     signal resetAllRequested()
+    signal exampleRequested()
 
     signal startTimeEdited(real seconds)
     signal endTimeEdited(real seconds)
@@ -202,214 +200,96 @@ Rectangle {
             text: "Move IN and OUT on the thumbnails, then Split selection. Click a segment to select it. The playhead stays independent."
         }
 
+        // One interaction toolbar above the time ruler, matching HTML.
         Flow {
             Layout.fillWidth: true
             Layout.preferredHeight: childrenRect.height
             spacing: 5
-
-            component TrimButton: Button {
-                font.pixelSize: 11
+            component Action: Button {
+                id: action
+                font.pixelSize: 10
+                padding: 7
                 background: Rectangle {
                     radius: 7
-                    color: parent.down
-                        ? (root.tokens.accentTint || "#334")
-                        : (root.tokens.panelGlassStrong || "#272735")
+                    color: action.hovered ? (root.tokens.accentTint || "#124B4C") :
+                         (root.tokens.panelGlassStrong || "#113840")
+                    border.color: root.tokens.panelBorder || "#23515A"
                     border.width: 1
-                    border.color: root.tokens.panelBorder || "#444"
                 }
                 contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.textPrimary || "#fff"
+                    text: action.text
+                    font: action.font
+                    color: root.tokens.textPrimary || "#E6F6F6"
+                    opacity: action.enabled ? 1 : .35
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
             }
-
-            TrimButton {
-                id: rangePlaybackButton
-                text: root.previewPlaying ? "Pause" : "Play range"
+            Action {
+                text: root.rangePlaying ? "❚❚ Pause range    R" : "▶ Play range    R"
                 onClicked: root.togglePlaybackRequested()
-                // The previous ❚❚ characters had font-dependent spacing.
-                // Draw two aligned bars ourselves for a compact pause icon.
-                contentItem: Item {
-                    implicitWidth: playbackContents.implicitWidth
-                    implicitHeight: playbackContents.implicitHeight
-                    Row {
-                        id: playbackContents
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        Item {
-                            width: 12
-                            height: 14
-                            y: (playbackContents.height - height) / 2
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "▶"
-                                font.pixelSize: 12
-                                color: root.tokens.textPrimary || "#fff"
-                                visible: !root.previewPlaying
-                            }
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 3
-                                visible: root.previewPlaying
-                                Rectangle {
-                                    width: 3
-                                    height: 11
-                                    radius: 1
-                                    color: root.tokens.textPrimary || "#fff"
-                                }
-                                Rectangle {
-                                    width: 3
-                                    height: 11
-                                    radius: 1
-                                    color: root.tokens.textPrimary || "#fff"
-                                }
-                            }
-                        }
-                        Text {
-                            text: rangePlaybackButton.text
-                            font: rangePlaybackButton.font
-                            color: root.tokens.textPrimary || "#fff"
-                            y: (playbackContents.height - height) / 2
-                        }
-                    }
-                }
             }
-            TrimButton {
-                text: "Normal play"
-                onClicked: root.normalPlaybackRequested()
-                ToolTip.text: "Continue from the current playhead"
-                ToolTip.visible: hovered
-            }
-            TrimButton {
-                text: "Jump next"
+            Action {
+                text: "⇥ Jump next    J"
                 enabled: root.hasNextKept
                 onClicked: root.jumpNextRequested()
-                ToolTip.text: "Seek to the next retained segment"
-                ToolTip.visible: hovered
             }
-            TrimButton {
-                id: speedButton
-                text: root.editSpeed + "x ▾"
-                onClicked: speedMenu.open()
-                Menu {
-                    id: speedMenu
-                    parent: speedButton
-                    y: speedButton.height
-                    Repeater {
-                        model: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                        MenuItem {
-                            text: modelData + "x"
-                            checkable: true
-                            checked: root.editSpeed === modelData
-                            onTriggered: root.speedEdited(modelData)
-                        }
-                    }
-                }
-            }
-            RowLayout {
-                spacing: 2
-                TrimButton {
-                    id: editSoundButton
-                    text: root.audioVolumePercent === 0 ? "🔇 Muted" :
-                          root.audioVolumePercent === 100 ? "🔊 Sound on" :
-                          "🔊 " + root.audioVolumePercent + "%"
-                    onClicked: root.audioVolumeEdited(
-                        root.audioVolumePercent === 0 ? root.lastAudibleVolume : 0)
-                    ToolTip.visible: hovered
-                    ToolTip.text: root.audioVolumePercent === 0
-                        ? "Restore previous volume"
-                        : "Mute preview and remove audio from exported MP4"
-                    ToolTip.delay: 400
-                }
-                TrimButton {
-                    id: audioSettingsButton
-                    text: "▾"
-                    onClicked: root.showAudioVolumePopup()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Adjust MP4 export audio volume"
-                    ToolTip.delay: 400
-                }
-            }
-            TrimButton {
-                text: "Set IN"
-                onClicked: root.startTimeEdited(Math.max(0, Math.min(root.position, root.endTime - 0.1)))
-            }
-            TrimButton {
-                text: "Set OUT"
-                onClicked: root.endTimeEdited(Math.min(root.duration, Math.max(root.position, root.startTime + 0.1)))
-            }
-            TrimButton {
-                text: "Reset range"
-                onClicked: root.resetRequested()
-            }
-            Item { Layout.fillWidth: true }
-            TrimButton {
-                text: root.segmentEditing && settingsStore.mp4ExportMode === "replace"
-                    ? "Queue MP4" : settingsStore.mp4ExportMode === "replace" ? "Replace MP4" :
-                      settingsStore.mp4ExportMode === "saveAs" ? "Save MP4 as..." : "Queue MP4"
-                enabled: (root.segmentEditing ? root.keptDuration >= 0.05
-                          : root.endTime-root.startTime >= 0.1) &&
-                    (settingsStore.mp4ExportMode === "replace" && !root.segmentEditing
-                        ? root.sourceIsMp4 && !exportQueue.hasOutstanding &&
-                          !videoExportController.busy : exportQueue.canQueue)
-                onClicked: root.exportRequested()
-            }
-        }
-        Flow {
-            Layout.fillWidth: true
-            Layout.preferredHeight: childrenRect.height
-            spacing: 6
-            component EditAction: Button {
-                font.pixelSize: 10
-                background: Rectangle {
-                    radius: 6
-                    color: parent.hovered ? (root.tokens.accentTint || "#253E35")
-                                           : (root.tokens.panelGlassStrong || "#222D33")
-                    border.color: root.tokens.panelBorder || "#445"
-                }
-                contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.textPrimary || "#fff"
-                    opacity: parent.enabled ? 1 : 0.4
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            EditAction {
+            Button {
                 id: splitButton
                 text: "✂ Split selection    S"
+                font.pixelSize: 10
+                padding: 7
+                enabled: root.endTime-root.startTime >= .05
                 onClicked: root.splitRequested()
                 background: Rectangle {
                     radius: 7
-                    color: root.tokens.accentSolid || "#29C7AC"
+                    color: splitButton.enabled ?
+                          (root.tokens.accentSolid || "#29C7AC") :
+                          (root.tokens.panelGlassStrong || "#113840")
                 }
                 contentItem: Text {
                     text: splitButton.text
                     font: splitButton.font
-                    color: root.tokens.videoCardBackground || "#06171D"
+                    color: splitButton.enabled ? (root.tokens.videoCardBackground || "#06171D") :
+                                                (root.tokens.textMuted || "#638C96")
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
             }
-            EditAction { text: "Soft Delete    Del"; enabled: root.canSoftDelete; onClicked: root.softDeleteRequested() }
-            EditAction { text: "Restore"; enabled: root.selectedRemoved; onClicked: root.restoreSegmentRequested() }
-            EditAction { text: "Remove Gap"; enabled: root.selectedRemoved && !root.selectedCollapsed; onClicked: root.removeGapRequested(root.selectedSegmentId) }
-            EditAction { text: "↶ Undo"; enabled: root.canUndo; onClicked: root.undoRequested() }
-            EditAction { text: "↷ Redo"; enabled: root.canRedo; onClicked: root.redoRequested() }
-            Text {
-                text: root.displaySegments.length + " segments · " +
-                      root.timeText(root.keptDuration/Math.max(0.25,root.editSpeed)) + " export"
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 10
+            Action {
+                text: "▧ Soft Delete    Del"
+                enabled: root.canSoftDelete
+                onClicked: root.softDeleteRequested()
             }
+            Action {
+                text: "↩ Restore"
+                enabled: root.selectedRemoved
+                onClicked: root.restoreSegmentRequested()
+            }
+            Action {
+                text: "⌦ Remove Gap"
+                enabled: root.selectedRemoved && !root.selectedCollapsed
+                onClicked: root.removeGapRequested(root.selectedSegmentId)
+            }
+            Action { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
+            Action { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
+            Action {
+                text: "Set IN"
+                onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12))
+            }
+            Action {
+                text: "Set OUT"
+                onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12))
+            }
+            Action { text: "Reset range"; onClicked: root.resetRequested() }
+            Action {
+                text: "✧ Try example"
+                enabled: root.sourceDuration > 1.0
+                onClicked: root.exampleRequested()
+            }
+            Action { text: "Reset all"; onClicked: root.resetAllRequested() }
         }
+
         Item {
             id: timelineRuler
             Layout.fillWidth: true
@@ -819,128 +699,4 @@ Rectangle {
             font.pixelSize: 10
         }
     }
-    function showAudioVolumePopup() {
-        const pt = audioSettingsButton.mapToItem(audioVolumePopup.parent, 0, 0);
-        audioVolumePopup.x = Math.max(8, Math.min(
-            pt.x + audioSettingsButton.width - audioVolumePopup.width,
-            prismWindow.width - audioVolumePopup.width - 8));
-        audioVolumePopup.y = Math.max(8, pt.y - audioVolumePopup.height - 8);
-        audioVolumePopup.open();
-    }
-
-    Popup {
-        id: audioVolumePopup
-        parent: Overlay.overlay
-        width: 274
-        height: 216
-        padding: 13
-        modal: false
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle {
-            radius: 11
-            color: root.tokens.panelGlassStrong || "#141A16"
-            border.color: root.tokens.accentSolid || "#32E77E"
-            border.width: 1
-        }
-        contentItem: ColumnLayout {
-            spacing: 8
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    Layout.fillWidth: true
-                    text: "Export audio volume"
-                    color: root.tokens.textPrimary || "#fff"
-                    font.pixelSize: 12
-                    font.bold: true
-                }
-                Text {
-                    text: root.audioVolumePercent + "%"
-                    color: root.tokens.accentSolid || "#32E77E"
-                    font.pixelSize: 12
-                    font.bold: true
-                }
-            }
-            Slider {
-                id: audioVolumeSlider
-                Layout.fillWidth: true
-                from: 0
-                to: 100
-                stepSize: 5
-                value: root.audioVolumePercent
-                onMoved: root.audioVolumeEdited(Math.round(value))
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: "Muted"
-                    font.pixelSize: 10
-                    color: root.tokens.textMuted || "#888"
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: "Original volume"
-                    font.pixelSize: 10
-                    color: root.tokens.textMuted || "#888"
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                Repeater {
-                    model: [25, 50, 75, 100]
-                    Button {
-                        required property int modelData
-                        Layout.fillWidth: true
-                        text: modelData + "%"
-                        font.pixelSize: 10
-                        onClicked: root.audioVolumeEdited(modelData)
-                        background: Rectangle {
-                            radius: 6
-                            color: root.audioVolumePercent === modelData
-                                ? (root.tokens.accentTint || "#193826")
-                                : (root.tokens.panelGlass || "#252B28")
-                            border.width: 1
-                            border.color: root.audioVolumePercent === modelData
-                                ? (root.tokens.accentSolid || "#32E77E")
-                                : (root.tokens.panelBorder || "#444")
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: root.tokens.textPrimary || "#fff"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-            }
-            Text {
-                Layout.fillWidth: true
-                text: root.audioVolumePercent === 0
-                    ? "Audio removed from exported MP4."
-                    : root.audioVolumePercent === 100
-                        ? "Original audio level preserved."
-                        : "MP4 audio exported at " + root.audioVolumePercent + "% of source."
-                wrapMode: Text.WordWrap
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 10
-            }
-            Button {
-                Layout.alignment: Qt.AlignRight
-                text: "Reset to 100%"
-                flat: true
-                font.pixelSize: 10
-                onClicked: root.audioVolumeEdited(100)
-                contentItem: Text {
-                    text: parent.text
-                    font: parent.font
-                    color: root.tokens.accentSolid || "#32E77E"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-    }
-
 }
