@@ -699,28 +699,41 @@ Rectangle {
             }
         }
 
-        Flow {
-            id: toolbarFlow
+        RowLayout {
+            id: toolbarRow
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? childrenRect.height : 0
             visible: root.toolbarExpanded
             spacing: 5
 
-            RibbonButton { text: "✂ Split  S"; enabled: root.endTime-root.startTime >= .05; onClicked: root.splitRequested() }
-            RibbonButton { text: "Soft Delete  Del"; enabled: root.canSoftDelete; onClicked: root.softDeleteRequested() }
-            RibbonButton { text: "Restore"; enabled: root.selectedRemoved; onClicked: root.restoreSegmentRequested() }
-            RibbonButton { text: "Remove Gap"; enabled: root.selectedRemoved && !root.selectedCollapsed; onClicked: root.removeGapRequested(root.selectedSegmentId) }
-            RibbonButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
-            RibbonButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
-            RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
+            Flow {
+                id: toolbarLeftFlow
+                Layout.fillWidth: true
+                Layout.preferredHeight: childrenRect.height
+                spacing: 5
 
-            Rectangle { width: 1; height: 24; color: root.tokens.panelBorder || "#23515A" }
+                RibbonButton { text: "✂ Split  S"; enabled: root.endTime-root.startTime >= .05; onClicked: root.splitRequested() }
+                RibbonButton { text: "Soft Delete  Del"; enabled: root.canSoftDelete; onClicked: root.softDeleteRequested() }
+                RibbonButton { text: "Restore"; enabled: root.selectedRemoved; onClicked: root.restoreSegmentRequested() }
+                RibbonButton { text: "Remove Gap"; enabled: root.selectedRemoved && !root.selectedCollapsed; onClicked: root.removeGapRequested(root.selectedSegmentId) }
+                RibbonButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
+                RibbonButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
+                RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
+            }
 
-            RibbonButton { text: root.rangePlaying ? "❚❚ Range  R" : "▶ Range  R"; onClicked: root.togglePlaybackRequested() }
-            RibbonButton { text: "⇥ Next  J"; enabled: root.hasNextKept; onClicked: root.jumpNextRequested() }
-            RibbonButton { text: "Set IN"; onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12)) }
-            RibbonButton { text: "Set OUT"; onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12)) }
-            RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
+            Flow {
+                id: toolbarRightFlow
+                Layout.preferredWidth: Math.min(implicitWidth, toolbarRow.width)
+                Layout.preferredHeight: childrenRect.height
+                layoutDirection: Qt.RightToLeft
+                spacing: 5
+
+                RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
+                RibbonButton { text: "Set OUT"; onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12)) }
+                RibbonButton { text: "Set IN"; onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12)) }
+                RibbonButton { text: "⇥ Next  J"; enabled: root.hasNextKept; onClicked: root.jumpNextRequested() }
+                RibbonButton { text: root.rangePlaying ? "❚❚ Range  R" : "▶ Range  R"; onClicked: root.togglePlaybackRequested() }
+            }
         }
 
         Text {
