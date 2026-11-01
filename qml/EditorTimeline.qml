@@ -440,11 +440,11 @@ Rectangle {
                 property real displayTime: playheadGrab.pressed
                     ? playheadGrab.scrubSeconds : root.position
                 width: 22
-                height: frameTrack.height + 15
+                height: frameTrack.height + 36
                 x: frameTrack.x +
                     Math.max(0, Math.min(1, displayTime / Math.max(root.duration, 0.001)))
                     * frameTrack.width - width / 2
-                y: frameTrack.y - 15
+                y: frameTrack.y - 36
                 z: 7
                 visible: root.duration > 0
 
