@@ -291,12 +291,12 @@ Rectangle {
         Flickable {
             id: timelineViewport
             Layout.fillWidth: true
-            Layout.preferredHeight: 127
+            Layout.preferredHeight: 100
             clip: true
             interactive: true
             boundsBehavior: Flickable.StopAtBounds
             contentWidth: Math.max(width,width*root.timelineZoom)
-            contentHeight: 116
+            contentHeight: 100
             ScrollBar.horizontal: ScrollBar { policy: root.timelineZoom>1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
             WheelHandler {
                 target: null
@@ -311,7 +311,7 @@ Rectangle {
             Item {
                 id: timelineContent
                 width: timelineViewport.contentWidth
-                height: 116
+                height: 100
                 Item {
                     id: timelineRuler
                     width: parent.width
@@ -355,8 +355,8 @@ Rectangle {
 
                 Item {
                     width: parent.width
-                    height: 90
-                    y: 23
+                    height: 76
+                    y: 17
 
             // Real thumbnail images are generated asynchronously by FFmpeg.
             Rectangle {

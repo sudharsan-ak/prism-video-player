@@ -603,7 +603,7 @@ ApplicationWindow {
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 280
+                    Layout.preferredHeight: 250
                     visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
                     toolbarExpanded: settings.editorToolbarExpanded
                     onToolbarExpandedChanged: settings.editorToolbarExpanded = toolbarExpanded
