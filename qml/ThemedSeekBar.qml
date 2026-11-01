@@ -11,9 +11,15 @@ Slider {
     property var tokens: themeController.tokens
     property real mediaPosition: 0
     property real mediaDuration: 0
+    property bool endOfFileReached: false
     property real scrubPosition: -1
 
-    readonly property real displayPosition: scrubPosition >= 0 ? scrubPosition : mediaPosition
+    // mpv's time-pos stops at the PTS of the last decoded frame,
+    // which can be one frame (~40ms at 24fps) short of duration.
+    // Show a fully completed seek bar only after mpv confirms EOF.
+    // A user scrub takes precedence so the handle remains draggable.
+    readonly property real displayPosition: scrubPosition >= 0 ? scrubPosition
+        : (endOfFileReached && mediaDuration > 0 ? mediaDuration : mediaPosition)
     readonly property int trackThickness: settingsStore.seekBarThickness === "thick" ? 8
         : (settingsStore.seekBarThickness === "medium" ? 6 : 4)
     readonly property bool flatStyle: themeController.activeThemeName === "terminalFlat"
