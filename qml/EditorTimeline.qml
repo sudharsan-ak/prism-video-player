@@ -275,8 +275,8 @@ Rectangle {
                 }
 
                 Rectangle {
-                    x: trimRange.first.visualPosition * parent.width
-                    width: Math.max(0, (trimRange.second.visualPosition - trimRange.first.visualPosition) * parent.width)
+                    x: (root.startTime/Math.max(root.duration,0.001)) * parent.width
+                    width: Math.max(0, ((root.endTime/Math.max(root.duration,0.001)) - (root.startTime/Math.max(root.duration,0.001))) * parent.width)
                     height: parent.height
                     color: root.tokens.accentTint || "#334466"
                     border.color: root.tokens.accentSolid || "#A89BFF"
@@ -284,48 +284,40 @@ Rectangle {
                 }
             }
 
-            RangeSlider {
-                id: trimRange
-                HoverHandler { cursorShape: Qt.PointingHandCursor }
-                anchors.fill: parent
-                from: 0
-                to: Math.max(root.duration, 0.001)
-                first.value: root.startTime
-                second.value: root.endTime
-                focusPolicy: Qt.NoFocus
-                live: true
-                first.onMoved: root.startTimeEdited(first.value)
-                second.onMoved: root.endTimeEdited(second.value)
-                // IN/OUT adjustments never seek or move the playhead.
-                background: Item {}
-                first.handle: Rectangle {
-                    HoverHandler { cursorShape: Qt.SizeHorCursor }
-                    width: 14; height: 46; radius: 4
-                    x: trimRange.leftPadding + trimRange.first.visualPosition * (trimRange.availableWidth - width)
-                    y: (trimRange.height - height) / 2
-                    color: root.tokens.accentSolid || "#A89BFF"
-                    border.width: 2
-                    border.color: root.tokens.seekThumbEdge || "#fff"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Ⅰ"
-                        font.pixelSize: 12
-                        color: root.tokens.videoCardBackground || "#111"
+            // Trim handles are separate from the click targets on segments.
+            Rectangle {
+                id: inHandle
+                width: 14; height: frameTrack.height
+                x: frameTrack.x + Math.max(0, Math.min(frameTrack.width-width,
+                    root.startTime/Math.max(root.duration,0.001)*frameTrack.width-width/2))
+                y: frameTrack.y; radius: 4; z: 12
+                color: root.tokens.accentSolid || "#29C7AC"
+                border.color: root.tokens.textPrimary || "#fff"
+                border.width: 1
+                Text { anchors.centerIn: parent; text: "Ⅰ"; font.pixelSize: 11; color: "#071D1D" }
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    onPositionChanged: function(mouse) {
+                        if (pressed) root.startTimeEdited(root.seekTimeAtPixel(
+                            mapToItem(frameTrack,mouse.x,mouse.y).x));
                     }
                 }
-                second.handle: Rectangle {
-                    HoverHandler { cursorShape: Qt.SizeHorCursor }
-                    width: 14; height: 46; radius: 4
-                    x: trimRange.leftPadding + trimRange.second.visualPosition * (trimRange.availableWidth - width)
-                    y: (trimRange.height - height) / 2
-                    color: root.tokens.accentSolid || "#A89BFF"
-                    border.width: 2
-                    border.color: root.tokens.seekThumbEdge || "#fff"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Ⅱ"
-                        font.pixelSize: 12
-                        color: root.tokens.videoCardBackground || "#111"
+            }
+            Rectangle {
+                id: outHandle
+                width: 14; height: frameTrack.height
+                x: frameTrack.x + Math.max(0, Math.min(frameTrack.width-width,
+                    root.endTime/Math.max(root.duration,0.001)*frameTrack.width-width/2))
+                y: frameTrack.y; radius: 4; z: 13
+                color: root.tokens.accentSolid || "#29C7AC"
+                border.color: root.tokens.textPrimary || "#fff"
+                border.width: 1
+                Text { anchors.centerIn: parent; text: "Ⅱ"; font.pixelSize: 11; color: "#071D1D" }
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    onPositionChanged: function(mouse) {
+                        if (pressed) root.endTimeEdited(root.seekTimeAtPixel(
+                            mapToItem(frameTrack,mouse.x,mouse.y).x));
                     }
                 }
             }
@@ -339,13 +331,12 @@ Rectangle {
                 property real originalEnd: 0
                 property bool dragActivated: false
                 property real clickThreshold: 5
-                x: frameTrack.x + trimRange.first.visualPosition * frameTrack.width + 14
+                x: frameTrack.x + (root.startTime/Math.max(root.duration,0.001)) * frameTrack.width + 14
                 y: frameTrack.y
-                width: Math.max(0, (trimRange.second.visualPosition -
-                    trimRange.first.visualPosition) * frameTrack.width - 28)
-                height: frameTrack.height
-                visible: width > 10 && root.duration > 0 &&
-                    !root.displaySegments.some(s => s.id === root.selectedSegmentId && s.removed)
+                width: Math.max(0, ((root.endTime/Math.max(root.duration,0.001)) -
+                    (root.startTime/Math.max(root.duration,0.001))) * frameTrack.width - 28)
+                height: 8
+                visible: width > 10 && root.duration > 0
                 z: 5
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
