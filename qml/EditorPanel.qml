@@ -304,6 +304,7 @@ Rectangle {
                         RowLayout {
                             id: segLine
                             required property var modelData
+                            required property int index
                             Layout.fillWidth: true
                             Layout.leftMargin: 8
                             Layout.rightMargin: 8

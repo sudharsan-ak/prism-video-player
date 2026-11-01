@@ -205,32 +205,6 @@ Rectangle {
                                     root.seekRequested(root.seekTimeAtPixel(pt.x));
                                 }
                             }
-                            Button {
-                                id: gapButton
-                                anchors.centerIn: parent
-                                visible: segmentTile.seg.removed && segmentTile.width > 105
-                                width: Math.min(112,segmentTile.width-12)
-                                height: 24
-                                text: "▣ Remove Gap"
-                                font.pixelSize: 10
-                                onClicked: {
-                                    root.segmentSelected(segmentTile.seg.id);
-                                    root.removeGapRequested(segmentTile.seg.id);
-                                }
-                                background: Rectangle {
-                                    radius: 6
-                                    color: gapButton.hovered ? (root.tokens.accentTint || "#29463A")
-                                                             : (root.tokens.panelGlassStrong || "#131B1E")
-                                    border.color: root.tokens.accentSolid || "#28DCA7"
-                                }
-                                contentItem: Text {
-                                    text: gapButton.text
-                                    font: gapButton.font
-                                    color: root.tokens.textPrimary || "#fff"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
                             Text {
                                 anchors.left: parent.left
                                 anchors.bottom: parent.bottom
@@ -328,7 +302,8 @@ Rectangle {
                 width: Math.max(0, (trimRange.second.visualPosition -
                     trimRange.first.visualPosition) * frameTrack.width - 28)
                 height: frameTrack.height
-                visible: width > 10 && root.duration > 0
+                visible: width > 10 && root.duration > 0 &&
+                    !root.displaySegments.some(s => s.id === root.selectedSegmentId && s.removed)
                 z: 5
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
@@ -377,6 +352,42 @@ Rectangle {
                     root.seekRequested(root.seekTimeAtPixel(pt.x));
                 }
                 onCanceled: dragActivated = false
+            }
+
+            // Above RangeSlider and selection drag layer so this button
+            // remains clickable even when the excluded gap is selected.
+            Repeater {
+                model: root.displaySegments
+                Button {
+                    id: gapAction
+                    required property var modelData
+                    property var seg: modelData
+                    width: Math.min(116,Math.max(0,
+                        (seg.visualEnd-seg.visualStart) /
+                        Math.max(root.duration,0.001)*frameTrack.width - 12))
+                    height: 24
+                    x: frameTrack.x + (seg.visualStart+seg.visualEnd) /
+                        2/Math.max(root.duration,0.001)*frameTrack.width - width/2
+                    y: frameTrack.y + (frameTrack.height-height)/2
+                    z: 6
+                    visible: seg.removed && !seg.collapsed && width > 92
+                    text: "▣ Remove Gap"
+                    font.pixelSize: 10
+                    onClicked: root.removeGapRequested(seg.id)
+                    background: Rectangle {
+                        radius: 6
+                        color: gapAction.hovered ? (root.tokens.accentTint || "#29463A")
+                                                 : (root.tokens.panelGlassStrong || "#131B1E")
+                        border.color: root.tokens.accentSolid || "#28DCA7"
+                    }
+                    contentItem: Text {
+                        text: gapAction.text
+                        font: gapAction.font
+                        color: root.tokens.textPrimary || "#fff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
             }
 
             // Clipchamp-style playhead: a wide grab target and a narrow
@@ -481,16 +492,33 @@ Rectangle {
             }
         }
 
-        RowLayout {
+        Flow {
             Layout.fillWidth: true
-            spacing: 5
-            Button { text: "✂ Split selection"; onClicked: root.splitRequested() }
-            Button { text: "Soft Delete"; onClicked: root.softDeleteRequested() }
-            Button { text: "Restore"; onClicked: root.restoreSegmentRequested() }
-            Button { text: "Remove Gap"; onClicked: root.removeGapRequested(root.selectedSegmentId) }
-            Button { text: "↶ Undo"; enabled: root.canUndo; onClicked: root.undoRequested() }
-            Button { text: "↷ Redo"; enabled: root.canRedo; onClicked: root.redoRequested() }
-            Item { Layout.fillWidth: true }
+            Layout.preferredHeight: childrenRect.height
+            spacing: 6
+            component EditAction: Button {
+                font.pixelSize: 10
+                background: Rectangle {
+                    radius: 6
+                    color: parent.hovered ? (root.tokens.accentTint || "#253E35")
+                                           : (root.tokens.panelGlassStrong || "#222D33")
+                    border.color: root.tokens.panelBorder || "#445"
+                }
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: root.tokens.textPrimary || "#fff"
+                    opacity: parent.enabled ? 1 : 0.4
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            EditAction { text: "✂ Split selection"; onClicked: root.splitRequested() }
+            EditAction { text: "Soft Delete"; onClicked: root.softDeleteRequested() }
+            EditAction { text: "Restore"; onClicked: root.restoreSegmentRequested() }
+            EditAction { text: "Remove Gap"; onClicked: root.removeGapRequested(root.selectedSegmentId) }
+            EditAction { text: "↶ Undo"; enabled: root.canUndo; onClicked: root.undoRequested() }
+            EditAction { text: "↷ Redo"; enabled: root.canRedo; onClicked: root.redoRequested() }
             Text {
                 text: root.displaySegments.length + " segments · " +
                       root.timeText(root.keptDuration/Math.max(0.25,root.editSpeed)) + " export"
@@ -651,10 +679,12 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             TrimButton {
-                text: settingsStore.mp4ExportMode === "replace" ? "Replace MP4" :
+                text: root.segmentEditing && settingsStore.mp4ExportMode === "replace"
+                    ? "Queue MP4" : settingsStore.mp4ExportMode === "replace" ? "Replace MP4" :
                       settingsStore.mp4ExportMode === "saveAs" ? "Save MP4 as..." : "Queue MP4"
-                enabled: root.endTime - root.startTime >= 0.1 &&
-                    (settingsStore.mp4ExportMode === "replace"
+                enabled: (root.segmentEditing ? root.keptDuration >= 0.05
+                          : root.endTime-root.startTime >= 0.1) &&
+                    (settingsStore.mp4ExportMode === "replace" && !root.segmentEditing
                         ? root.sourceIsMp4 && !exportQueue.hasOutstanding &&
                           !videoExportController.busy : exportQueue.canQueue)
                 onClicked: root.exportRequested()
