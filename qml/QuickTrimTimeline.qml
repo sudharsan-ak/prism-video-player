@@ -78,23 +78,15 @@ Rectangle {
         anchors.bottomMargin: 9
         spacing: 7
 
-        // Row 1: title, times, playback, speed and sound on one line.
+        // Row 1: label/back left, transport centered, stats + speed + sound right.
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
             spacing: 9
             Text { text: "QUICK TRIM"; font.pixelSize: 11; font.bold: true; color: root.ink }
+
             Item { Layout.fillWidth: true }
-            Text { text: "IN"; font.pixelSize: 10; color: root.muted }
-            Text { text: root.timeText(root.startTime); font.pixelSize: 11; font.bold: true; color: root.ink }
-            Text { text: "OUT"; font.pixelSize: 10; color: root.muted }
-            Text { text: root.timeText(root.endTime); font.pixelSize: 11; font.bold: true; color: root.ink }
-            Text { text: "SELECTED"; visible: root.width>=950; font.pixelSize: 10; color: root.muted }
-            Text {
-                text: root.timeText(root.endTime-root.startTime)
-                visible: root.width>=950; font.pixelSize: 11; font.bold: true; color: root.ink
-            }
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.line }
+
             TrimButton {
                 text: "↤"
                 onClicked: root.beginningRequested()
@@ -134,6 +126,18 @@ Rectangle {
             Text {
                 text: root.timeText(root.position)+" / "+root.timeText(root.duration)
                 font.pixelSize: 11; color: root.ink
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Text { text: "IN"; font.pixelSize: 10; color: root.muted }
+            Text { text: root.timeText(root.startTime); font.pixelSize: 11; font.bold: true; color: root.ink }
+            Text { text: "OUT"; font.pixelSize: 10; color: root.muted }
+            Text { text: root.timeText(root.endTime); font.pixelSize: 11; font.bold: true; color: root.ink }
+            Text { text: "SELECTED"; visible: root.width>=950; font.pixelSize: 10; color: root.muted }
+            Text {
+                text: root.timeText(root.endTime-root.startTime)
+                visible: root.width>=950; font.pixelSize: 11; font.bold: true; color: root.ink
             }
             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.line }
             TrimButton {

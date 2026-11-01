@@ -131,20 +131,23 @@ Rectangle {
         anchors.bottomMargin: 10
         spacing: 5
 
-        // Row 1: label/back left, transport centered, zoom right.
-        RowLayout {
+        // Row 1: label/back, transport, segment/export stats, zoom, speed, volume.
+        // A Flow (not RowLayout) so this degrades to wrapped rows instead of
+        // overflowing/clipping once the window gets narrow or the sidebar opens.
+        Flow {
+            id: headerFlow
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
+            Layout.preferredHeight: childrenRect.height
             spacing: 9
             Text {
                 text: "ADVANCED EDITOR"
                 color: root.tokens.textPrimary || "#E6F6F6"
                 font.pixelSize: 11
                 font.bold: true
+                height: 30
+                verticalAlignment: Text.AlignVCenter
             }
             RibbonButton { text: "← Quick Trim"; onClicked: root.quickTrimRequested() }
-
-            Item { Layout.fillWidth: true }
 
             RibbonButton {
                 text: "↤"
@@ -187,7 +190,37 @@ Rectangle {
                 color: root.tokens.textPrimary || "#E6F6F6"
             }
 
-            Item { Layout.fillWidth: true }
+            Rectangle {
+                height: 24
+                visible: root.width >= 820
+                width: visible ? countText.implicitWidth+16 : 0
+                radius: 12
+                color: root.tokens.panelGlassStrong || "#0C3038"
+                border.color: root.tokens.panelBorder || "#23515A"
+                Text {
+                    id: countText
+                    anchors.centerIn: parent
+                    text: root.displaySegments.length + " segment(s)"
+                    color: root.tokens.textSecondary || "#85AAB1"
+                    font.pixelSize: 10
+                }
+            }
+            Rectangle {
+                height: 24
+                visible: root.width >= 950
+                width: visible ? editedTimeText.implicitWidth+18 : 0
+                radius: 12
+                color: root.tokens.panelGlassStrong || "#0C3038"
+                border.color: root.tokens.panelBorder || "#23515A"
+                Text {
+                    id: editedTimeText
+                    anchors.centerIn: parent
+                    text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
+                    color: root.tokens.accentSolid || "#29C7AC"
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+            }
 
             RibbonButton {
                 text: "−"
@@ -198,11 +231,38 @@ Rectangle {
                 text: Math.round(root.timelineZoom*100) + "%"
                 color: root.tokens.textSecondary || "#85AAB1"
                 font.pixelSize: 10
-                Layout.preferredWidth: 36
+                width: 36
+                height: 24
+                verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
             }
             RibbonButton { text: "+"; enabled: root.timelineZoom < 7.999; onClicked: root.stepZoom(1) }
             RibbonButton { text: "Fit"; onClicked: root.setZoom(1) }
+
+            Rectangle { width: 1; height: 18; color: root.tokens.panelBorder || "#23515A" }
+
+            RibbonButton {
+                id: speedButton
+                text: "▸  " + root.speedText(root.editSpeed)
+                onClicked: {
+                    const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
+                    speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
+                        pos.x+speedButton.width-speedPopup.width));
+                    speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
+                    speedPopup.open();
+                }
+            }
+            RibbonButton {
+                id: soundButton
+                text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
+                onClicked: {
+                    const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
+                    volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
+                        pos.x+soundButton.width-volumePopup.width));
+                    volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
+                    volumePopup.open();
+                }
+            }
         }
 
         // Compact advanced editing, actions are grouped beneath the timeline.
@@ -617,28 +677,6 @@ Rectangle {
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            Text {
-                text: "0:00"
-                font.pixelSize: 10
-                color: root.tokens.textMuted || "#888"
-            }
-            Item { Layout.fillWidth: true }
-            Text {
-                text: "Playhead: " + root.timeText(root.keptPosition)
-                font.pixelSize: 10
-                color: root.tokens.textSecondary || "#aaa"
-            }
-            Item { Layout.fillWidth: true }
-            Text {
-                text: root.timeText(root.keptDuration)
-                font.pixelSize: 10
-                color: root.tokens.textMuted || "#888"
-            }
-        }
-
         Flow {
             id: toolbarFlow
             Layout.fillWidth: true
@@ -651,6 +689,7 @@ Rectangle {
             RibbonButton { text: "Remove Gap"; enabled: root.selectedRemoved && !root.selectedCollapsed; onClicked: root.removeGapRequested(root.selectedSegmentId) }
             RibbonButton { text: "↶"; enabled: root.canUndo; onClicked: root.undoRequested() }
             RibbonButton { text: "↷"; enabled: root.canRedo; onClicked: root.redoRequested() }
+            RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
 
             Rectangle { width: 1; height: 24; color: root.tokens.panelBorder || "#23515A" }
 
@@ -660,64 +699,6 @@ Rectangle {
             RibbonButton { text: "Set OUT"; onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12)) }
             RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
             RibbonButton { text: "Example"; enabled: root.sourceDuration>1.0; onClicked: root.exampleRequested() }
-            RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
-
-            Rectangle { width: 1; height: 24; color: root.tokens.panelBorder || "#23515A" }
-
-            Rectangle {
-                height: 24
-                visible: root.width >= 820
-                width: visible ? countText.implicitWidth+16 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: countText
-                    anchors.centerIn: parent
-                    text: root.displaySegments.length + " segment(s)"
-                    color: root.tokens.textSecondary || "#85AAB1"
-                    font.pixelSize: 10
-                }
-            }
-            Rectangle {
-                height: 24
-                visible: root.width >= 950
-                width: visible ? editedTimeText.implicitWidth+18 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: editedTimeText
-                    anchors.centerIn: parent
-                    text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
-                    color: root.tokens.accentSolid || "#29C7AC"
-                    font.pixelSize: 10
-                    font.bold: true
-                }
-            }
-
-            RibbonButton {
-                id: speedButton
-                text: "▸  " + root.speedText(root.editSpeed)
-                onClicked: {
-                    const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
-                    speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
-                        pos.x+speedButton.width-speedPopup.width));
-                    speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
-                    speedPopup.open();
-                }
-            }
-            RibbonButton {
-                id: soundButton
-                text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
-                onClicked: {
-                    const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
-                    volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
-                        pos.x+soundButton.width-volumePopup.width));
-                    volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
-                    volumePopup.open();
-                }
-            }
         }
 
         Text {
