@@ -7,7 +7,6 @@ import QtQuick.Layouts
 // scrubs mpv position; export cuts at the exact chosen times.
 Rectangle {
     id: root
-    height: 280
     color: tokens.panelGlass || "#20202B"
     border.color: tokens.panelBorder || "transparent"
     border.width: 1
@@ -15,6 +14,7 @@ Rectangle {
     property var tokens: themeController.tokens
     property real duration: 0
     property real timelineZoom: 1.0
+    property bool toolbarExpanded: true
     signal quickTrimRequested()
     property real sourceDuration: 0
     property var displaySegments: []
@@ -202,6 +202,41 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 5
+
+                Rectangle {
+                    height: 24
+                    visible: root.width >= 820
+                    Layout.preferredWidth: visible ? countText.implicitWidth+16 : 0
+                    radius: 12
+                    color: root.tokens.panelGlassStrong || "#0C3038"
+                    border.color: root.tokens.panelBorder || "#23515A"
+                    Text {
+                        id: countText
+                        anchors.centerIn: parent
+                        text: root.displaySegments.length + " segment(s)"
+                        color: root.tokens.textSecondary || "#85AAB1"
+                        font.pixelSize: 10
+                    }
+                }
+                Rectangle {
+                    height: 24
+                    visible: root.width >= 950
+                    Layout.preferredWidth: visible ? editedTimeText.implicitWidth+18 : 0
+                    radius: 12
+                    color: root.tokens.panelGlassStrong || "#0C3038"
+                    border.color: root.tokens.panelBorder || "#23515A"
+                    Text {
+                        id: editedTimeText
+                        anchors.centerIn: parent
+                        text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
+                        color: root.tokens.accentSolid || "#29C7AC"
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                }
+
+                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.tokens.panelBorder || "#23515A" }
+
                 RibbonButton {
                     text: "−"
                     enabled: root.timelineZoom > 1.001
@@ -216,70 +251,38 @@ Rectangle {
                 }
                 RibbonButton { text: "+"; enabled: root.timelineZoom < 7.999; onClicked: root.stepZoom(1) }
                 RibbonButton { text: "Fit"; onClicked: root.setZoom(1) }
-            }
-        }
 
-        // Row 1b: segment/export stats, speed and volume, right-aligned.
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 24
-            spacing: 5
-            Item { Layout.fillWidth: true }
+                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.tokens.panelBorder || "#23515A" }
 
-            Rectangle {
-                height: 24
-                visible: root.width >= 820
-                Layout.preferredWidth: visible ? countText.implicitWidth+16 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: countText
-                    anchors.centerIn: parent
-                    text: root.displaySegments.length + " segment(s)"
-                    color: root.tokens.textSecondary || "#85AAB1"
-                    font.pixelSize: 10
+                RibbonButton {
+                    id: speedButton
+                    text: "▸  " + root.speedText(root.editSpeed)
+                    onClicked: {
+                        const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
+                        speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
+                            pos.x+speedButton.width-speedPopup.width));
+                        speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
+                        speedPopup.open();
+                    }
                 }
-            }
-            Rectangle {
-                height: 24
-                visible: root.width >= 950
-                Layout.preferredWidth: visible ? editedTimeText.implicitWidth+18 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: editedTimeText
-                    anchors.centerIn: parent
-                    text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
-                    color: root.tokens.accentSolid || "#29C7AC"
-                    font.pixelSize: 10
-                    font.bold: true
+                RibbonButton {
+                    id: soundButton
+                    text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
+                    onClicked: {
+                        const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
+                        volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
+                            pos.x+soundButton.width-volumePopup.width));
+                        volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
+                        volumePopup.open();
+                    }
                 }
-            }
 
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.tokens.panelBorder || "#23515A" }
+                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.tokens.panelBorder || "#23515A" }
 
-            RibbonButton {
-                id: speedButton
-                text: "▸  " + root.speedText(root.editSpeed)
-                onClicked: {
-                    const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
-                    speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
-                        pos.x+speedButton.width-speedPopup.width));
-                    speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
-                    speedPopup.open();
-                }
-            }
-            RibbonButton {
-                id: soundButton
-                text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
-                onClicked: {
-                    const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
-                    volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
-                        pos.x+soundButton.width-volumePopup.width));
-                    volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
-                    volumePopup.open();
+                RibbonButton {
+                    id: toolbarToggleButton
+                    text: root.toolbarExpanded ? "Tools  ▴" : "Tools  ▾"
+                    onClicked: root.toolbarExpanded = !root.toolbarExpanded
                 }
             }
         }
@@ -699,7 +702,8 @@ Rectangle {
         Flow {
             id: toolbarFlow
             Layout.fillWidth: true
-            Layout.preferredHeight: childrenRect.height
+            Layout.preferredHeight: visible ? childrenRect.height : 0
+            visible: root.toolbarExpanded
             spacing: 5
 
             RibbonButton { text: "✂ Split  S"; enabled: root.endTime-root.startTime >= .05; onClicked: root.splitRequested() }
@@ -717,7 +721,6 @@ Rectangle {
             RibbonButton { text: "Set IN"; onClicked: root.startTimeEdited(Math.min(root.position,root.endTime-.12)) }
             RibbonButton { text: "Set OUT"; onClicked: root.endTimeEdited(Math.max(root.position,root.startTime+.12)) }
             RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
-            RibbonButton { text: "Example"; enabled: root.sourceDuration>1.0; onClicked: root.exampleRequested() }
         }
 
         Text {
