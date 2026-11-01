@@ -334,6 +334,63 @@ Rectangle {
                     Layout.leftMargin: 9
                     Layout.rightMargin: 9
                     tokens: root.tokens
+                    titleText: "▤ Export Summary"
+                    subtitleText: root.timeText(
+                        root.editedDuration / Math.max(0.25, root.editSpeed))
+                    expanded: true
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                color: root.tokens.textSecondary || "#aaa"
+                font.pixelSize: 11
+                text: "Original duration: " + root.timeText(root.originalDuration) + "\n"
+                    + "Kept duration: " + root.timeText(root.editedDuration) + "\n"
+                    + "Excluded duration: " + root.timeText(root.excludedDuration) + "\n"
+                    + "Visible timeline: " + root.timeText(root.visualDuration) + "\n"
+                    + "Export duration: " + root.timeText(root.editedDuration
+                        / Math.max(0.25, root.editSpeed)) + "\n"
+                    + "Kept segments: " + root.segmentCount + "\n"
+                    + "Output: MP4 / GIF copy\n"
+                    + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
+                       root.audioVolumePercent === 100 ? "Original level" :
+                       root.audioVolumePercent + "% of original") + "\n"
+                    + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
+                    + "\nRotation: " + (root.quarterTurns * 90) + "°"
+                    + "\nCrop: " + (root.isCropped
+                        ? Math.round(root.cropWidth * 100) + "% × " +
+                          Math.round(root.cropHeight * 100) + "%"
+                        : "Full frame")
+                    + "\nSubtitles not included"
+                lineHeight: 1.45
+                wrapMode: Text.WordWrap
+            }
+
+
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "▷ Playback Preview"
+                    subtitleText: root.timeText(root.previewTime) + " / " + root.timeText(root.editedDuration)
+                    expanded: false
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 12
+                        Layout.rightMargin: 12
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                        color: root.tokens.textSecondary || "#85AAB1"
+                        text: "Normal Play uses the retained segments and automatically skips excluded sections. Play Range starts at the IN handle. The source video is never edited."
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
                     titleText: "Trim"
                     subtitleText: root.timeText(root.endTime - root.startTime) + " selected"
                     expanded: false
@@ -392,63 +449,6 @@ Rectangle {
                         tokens: root.tokens
                         quarterTurns: root.quarterTurns
                         onRotationRequested: function(turns) { root.rotationRequested(turns); }
-                    }
-                }
-
-                CollapsibleEditorSection {
-                    Layout.leftMargin: 9
-                    Layout.rightMargin: 9
-                    tokens: root.tokens
-                    titleText: "▤ Export Summary"
-                    subtitleText: root.timeText(
-                        root.editedDuration / Math.max(0.25, root.editSpeed))
-                    expanded: true
-            Text {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 11
-                text: "Original duration: " + root.timeText(root.originalDuration) + "\n"
-                    + "Kept duration: " + root.timeText(root.editedDuration) + "\n"
-                    + "Excluded duration: " + root.timeText(root.excludedDuration) + "\n"
-                    + "Visible timeline: " + root.timeText(root.visualDuration) + "\n"
-                    + "Export duration: " + root.timeText(root.editedDuration
-                        / Math.max(0.25, root.editSpeed)) + "\n"
-                    + "Kept segments: " + root.segmentCount + "\n"
-                    + "Output: MP4 / GIF copy\n"
-                    + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
-                       root.audioVolumePercent === 100 ? "Original level" :
-                       root.audioVolumePercent + "% of original") + "\n"
-                    + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
-                    + "\nRotation: " + (root.quarterTurns * 90) + "°"
-                    + "\nCrop: " + (root.isCropped
-                        ? Math.round(root.cropWidth * 100) + "% × " +
-                          Math.round(root.cropHeight * 100) + "%"
-                        : "Full frame")
-                    + "\nSubtitles not included"
-                lineHeight: 1.45
-                wrapMode: Text.WordWrap
-            }
-
-
-                }
-
-                CollapsibleEditorSection {
-                    Layout.leftMargin: 9
-                    Layout.rightMargin: 9
-                    tokens: root.tokens
-                    titleText: "▷ Playback Preview"
-                    subtitleText: root.timeText(root.previewTime) + " / " + root.timeText(root.editedDuration)
-                    expanded: false
-                    Text {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 12
-                        Layout.rightMargin: 12
-                        font.pixelSize: 10
-                        wrapMode: Text.WordWrap
-                        color: root.tokens.textSecondary || "#85AAB1"
-                        text: "Normal Play uses the retained segments and automatically skips excluded sections. Play Range starts at the IN handle. The source video is never edited."
                     }
                 }
 
