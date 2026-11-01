@@ -42,16 +42,6 @@ ApplicationWindow {
     // Independent of editorScreen so the same side panel is reachable from
     // Quick Trim and Advanced Editor without forcing a screen switch.
     property bool sidebarOpen: false
-
-    // Shared, draggable split between the video stage and the bottom edit
-    // panel (Quick Trim or Advanced Editor). Persisted via SettingsStore;
-    // 0 there means "no saved value yet", so fall back to a sane default.
-    readonly property int editorPanelMinHeight: 180
-    readonly property int editorPanelMaxHeight: 640
-    property int editorPanelHeight: settings.editorPanelHeight > 0
-        ? Math.max(editorPanelMinHeight, Math.min(editorPanelMaxHeight, settings.editorPanelHeight))
-        : 220
-    onEditorPanelHeightChanged: settings.editorPanelHeight = editorPanelHeight
     property string editSourcePath: ""
     property real editStart: 0
     property real editEnd: 0
@@ -557,58 +547,10 @@ ApplicationWindow {
                     mpv: videoSurface.mpv
                 }
 
-                // Drag to resize the edit panel below. Only present in edit
-                // mode, since playback mode's BottomControlBar is fixed-height.
-                Rectangle {
-                    id: editorResizeHandle
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 6
-                    visible: prismWindow.editMode
-                    color: resizeHandleArea.containsMouse || resizeHandleArea.pressed
-                        ? (prismWindow.tokens.accentTint || "#333")
-                        : "transparent"
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 36
-                        height: 3
-                        radius: 1.5
-                        color: resizeHandleArea.containsMouse || resizeHandleArea.pressed
-                            ? (prismWindow.tokens.accentSolid || "#29C7AC")
-                            : (prismWindow.tokens.panelBorder || "#444")
-                    }
-
-                    MouseArea {
-                        id: resizeHandleArea
-                        anchors.fill: parent
-                        anchors.topMargin: -4
-                        anchors.bottomMargin: -4
-                        hoverEnabled: true
-                        cursorShape: Qt.SizeVerCursor
-                        property real dragStartY: 0
-                        property int dragStartHeight: 0
-                        onPressed: function(mouse) {
-                            dragStartY = mapToItem(prismWindow.contentItem, mouse.x, mouse.y).y;
-                            dragStartHeight = prismWindow.editorPanelHeight;
-                        }
-                        onPositionChanged: function(mouse) {
-                            if (!pressed) return;
-                            const currentY = mapToItem(prismWindow.contentItem, mouse.x, mouse.y).y;
-                            // Dragging the handle down shrinks the panel and
-                            // grows the video stage above it; dragging up
-                            // grows the panel.
-                            const delta = currentY - dragStartY;
-                            prismWindow.editorPanelHeight = Math.max(
-                                prismWindow.editorPanelMinHeight,
-                                Math.min(prismWindow.editorPanelMaxHeight, dragStartHeight - delta));
-                        }
-                    }
-                }
-
                 QuickTrimTimeline {
                     id: quickTrimTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: prismWindow.editorPanelHeight
+                    Layout.preferredHeight: 166
                     visible: prismWindow.editMode && prismWindow.editorScreen === "quick"
                     enabled: exportQueue.canQueue
                     duration: editCuts.sourceDuration
@@ -661,7 +603,7 @@ ApplicationWindow {
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: prismWindow.editorPanelHeight
+                    Layout.preferredHeight: 280
                     visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
                     toolbarExpanded: settings.editorToolbarExpanded
                     onToolbarExpandedChanged: settings.editorToolbarExpanded = toolbarExpanded

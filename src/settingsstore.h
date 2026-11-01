@@ -22,7 +22,6 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString gifQualityPreset READ gifQualityPreset WRITE setGifQualityPreset NOTIFY gifQualityPresetChanged)
     Q_PROPERTY(QString mp4ExportMode READ mp4ExportMode WRITE setMp4ExportMode NOTIFY mp4ExportModeChanged)
     Q_PROPERTY(QString gifExportMode READ gifExportMode WRITE setGifExportMode NOTIFY gifExportModeChanged)
-    Q_PROPERTY(int editorPanelHeight READ editorPanelHeight WRITE setEditorPanelHeight NOTIFY editorPanelHeightChanged)
     Q_PROPERTY(bool editorToolbarExpanded READ editorToolbarExpanded WRITE setEditorToolbarExpanded NOTIFY editorToolbarExpandedChanged)
 
 public:
@@ -52,8 +51,6 @@ public:
     QString gifExportMode() const { return m_gifExportMode; }
     void setGifExportMode(const QString &mode);
 
-    int editorPanelHeight() const { return m_editorPanelHeight; }
-    void setEditorPanelHeight(int height);
     bool editorToolbarExpanded() const { return m_editorToolbarExpanded; }
     void setEditorToolbarExpanded(bool expanded);
 
@@ -82,7 +79,6 @@ signals:
     void mp4ExportModeChanged();
     void gifExportModeChanged();
     void resumeEnabledChanged();
-    void editorPanelHeightChanged();
     void editorToolbarExpandedChanged();
 
 private:
@@ -102,7 +98,6 @@ private:
     // those settings to opt into the new one-click destructive behavior.
     bool m_replaceModeConfirmed = false;
     QString m_gifExportMode = QStringLiteral("auto");
-    int m_editorPanelHeight = 0;     // 0 = use the component's own default
     bool m_editorToolbarExpanded = true;
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}

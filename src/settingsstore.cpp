@@ -82,7 +82,6 @@ void SettingsStore::load()
     const QString gifMode = root.value("gifExportMode").toString(QStringLiteral("auto"));
     if (gifMode == QStringLiteral("auto") || gifMode == QStringLiteral("saveAs"))
         m_gifExportMode = gifMode;
-    m_editorPanelHeight = root.value("editorPanelHeight").toInt(0);
     m_editorToolbarExpanded = root.value("editorToolbarExpanded").toBool(true);
     if (root.contains("resume") && root["resume"].isObject())
         m_resumePositions = root["resume"].toObject().toVariantMap();
@@ -109,7 +108,6 @@ void SettingsStore::save()
     root["mp4ExportMode"] = m_mp4ExportMode;
     root["replaceModeConfirmed"] = m_replaceModeConfirmed;
     root["gifExportMode"] = m_gifExportMode;
-    root["editorPanelHeight"] = m_editorPanelHeight;
     root["editorToolbarExpanded"] = m_editorToolbarExpanded;
     root["resume"] = QJsonObject::fromVariantMap(m_resumePositions);
     root["bookmarks"] = QJsonObject::fromVariantMap(m_bookmarks);
@@ -230,15 +228,6 @@ void SettingsStore::setGifExportMode(const QString &mode)
         return;
     m_gifExportMode = mode;
     emit gifExportModeChanged();
-    save();
-}
-
-void SettingsStore::setEditorPanelHeight(int height)
-{
-    if (height == m_editorPanelHeight)
-        return;
-    m_editorPanelHeight = height;
-    emit editorPanelHeightChanged();
     save();
 }
 
