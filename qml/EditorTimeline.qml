@@ -110,6 +110,8 @@ Rectangle {
         }
     }
 
+    function speedText(v) { return Number(v).toFixed(1)+"x"; }
+
     function timeText(seconds) {
         let whole = Math.max(0, Math.floor(seconds || 0));
         const h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60);
@@ -129,91 +131,10 @@ Rectangle {
         anchors.bottomMargin: 10
         spacing: 5
 
-        // Floating player, relocated below the video as approved.
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 43
-            Rectangle {
-                id: previewPill
-                anchors.centerIn: parent
-                height: 37
-                width: previewContent.implicitWidth + 28
-                radius: 19
-                color: "#E509131B"
-                border.width: 1
-                border.color: root.tokens.panelBorder || "#23515A"
-                Row {
-                    id: previewContent
-                    anchors.centerIn: parent
-                    spacing: 12
-                    Button {
-                        text: "↤"; width: 28; height: 30
-                        onClicked: root.beginningRequested()
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Beginning of edited timeline"
-                        background: Item {}
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#FFFFFF"
-                            font.pixelSize: 15
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    Button {
-                        id: previewPlay
-                        width: 33; height: 33
-                        text: root.previewPlaying ? "Pause" : "Play"
-                        onClicked: root.normalPlaybackRequested()
-                        background: Rectangle {
-                            radius: 18
-                            color: root.tokens.accentSolid || "#29C7AC"
-                        }
-                        contentItem: Item {
-                            Text {
-                                anchors.centerIn: parent
-                                anchors.horizontalCenterOffset: 1
-                                visible: !root.previewPlaying
-                                text: "▶"
-                                font.pixelSize: 15
-                                color: "#071D1D"
-                            }
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 3
-                                visible: root.previewPlaying
-                                Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
-                                Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
-                            }
-                        }
-                    }
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.timeText(root.keptPosition) + " / " + root.timeText(root.keptDuration)
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: "#FFFFFF"
-                    }
-                    Button {
-                        width: 30; height: 30
-                        text: root.audioVolumePercent === 0 ? "🔇" : "🔊"
-                        onClicked: root.audioVolumeEdited(root.audioVolumePercent===0
-                            ? Math.max(1,root.lastAudibleVolume) : 0)
-                        background: Item {}
-                        contentItem: Text {
-                            text: parent.text; font.pixelSize: 13
-                            color: "#FFFFFF"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-            }
-        }
-
+        // Row 1: label/back left, transport centered, zoom right.
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 24
+            Layout.preferredHeight: 30
             spacing: 9
             Text {
                 text: "ADVANCED EDITOR"
@@ -222,38 +143,52 @@ Rectangle {
                 font.bold: true
             }
             RibbonButton { text: "← Quick Trim"; onClicked: root.quickTrimRequested() }
+
             Item { Layout.fillWidth: true }
-            Rectangle {
-                Layout.preferredHeight: 24
-                visible: root.width >= 820
-                Layout.preferredWidth: visible ? countText.implicitWidth+16 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: countText
-                    anchors.centerIn: parent
-                    text: root.displaySegments.length + " segment(s)"
-                    color: root.tokens.textSecondary || "#85AAB1"
-                    font.pixelSize: 10
+
+            RibbonButton {
+                text: "↤"
+                onClicked: root.beginningRequested()
+                ToolTip.visible: hovered
+                ToolTip.text: "Beginning of edited timeline"
+            }
+            Button {
+                id: previewPlay
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                padding: 0
+                onClicked: root.normalPlaybackRequested()
+                background: Rectangle {
+                    radius: width/2
+                    color: previewPlay.hovered ? Qt.lighter(root.tokens.accentSolid || "#29C7AC",1.1)
+                                                : (root.tokens.accentSolid || "#29C7AC")
+                }
+                contentItem: Item {
+                    Text {
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: 1
+                        visible: !root.previewPlaying
+                        text: "▶"
+                        font.pixelSize: 15
+                        color: "#071D1D"
+                    }
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 3
+                        visible: root.previewPlaying
+                        Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                        Rectangle { width: 4; height: 12; radius: 1; color: "#071D1D" }
+                    }
                 }
             }
-            Rectangle {
-                Layout.preferredHeight: 24
-                visible: root.width >= 950
-                Layout.preferredWidth: visible ? editedTimeText.implicitWidth+18 : 0
-                radius: 12
-                color: root.tokens.panelGlassStrong || "#0C3038"
-                border.color: root.tokens.panelBorder || "#23515A"
-                Text {
-                    id: editedTimeText
-                    anchors.centerIn: parent
-                    text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
-                    color: root.tokens.accentSolid || "#29C7AC"
-                    font.pixelSize: 10
-                    font.bold: true
-                }
+            Text {
+                text: root.timeText(root.keptPosition) + " / " + root.timeText(root.keptDuration)
+                font.pixelSize: 11
+                color: root.tokens.textPrimary || "#E6F6F6"
             }
+
+            Item { Layout.fillWidth: true }
+
             RibbonButton {
                 text: "−"
                 enabled: root.timelineZoom > 1.001
@@ -732,6 +667,63 @@ Rectangle {
                 RibbonButton { text: "Reset range"; onClicked: root.resetRequested() }
                 RibbonButton { text: "Example"; enabled: root.sourceDuration>1.0; onClicked: root.exampleRequested() }
                 RibbonButton { text: "Reset all"; onClicked: root.resetAllRequested() }
+
+                Rectangle { width: 1; height: 24; color: root.tokens.panelBorder || "#23515A" }
+
+                Rectangle {
+                    height: 24
+                    visible: root.width >= 820
+                    width: visible ? countText.implicitWidth+16 : 0
+                    radius: 12
+                    color: root.tokens.panelGlassStrong || "#0C3038"
+                    border.color: root.tokens.panelBorder || "#23515A"
+                    Text {
+                        id: countText
+                        anchors.centerIn: parent
+                        text: root.displaySegments.length + " segment(s)"
+                        color: root.tokens.textSecondary || "#85AAB1"
+                        font.pixelSize: 10
+                    }
+                }
+                Rectangle {
+                    height: 24
+                    visible: root.width >= 950
+                    width: visible ? editedTimeText.implicitWidth+18 : 0
+                    radius: 12
+                    color: root.tokens.panelGlassStrong || "#0C3038"
+                    border.color: root.tokens.panelBorder || "#23515A"
+                    Text {
+                        id: editedTimeText
+                        anchors.centerIn: parent
+                        text: root.timeText(root.keptDuration/Math.max(.25,root.editSpeed)) + " export"
+                        color: root.tokens.accentSolid || "#29C7AC"
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                }
+
+                RibbonButton {
+                    id: speedButton
+                    text: "▸  " + root.speedText(root.editSpeed)
+                    onClicked: {
+                        const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
+                        speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
+                            pos.x+speedButton.width-speedPopup.width));
+                        speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
+                        speedPopup.open();
+                    }
+                }
+                RibbonButton {
+                    id: soundButton
+                    text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
+                    onClicked: {
+                        const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
+                        volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
+                            pos.x+soundButton.width-volumePopup.width));
+                        volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
+                        volumePopup.open();
+                    }
+                }
             }
         }
 
@@ -741,6 +733,132 @@ Rectangle {
             text: root.segmentWarning
             color: root.tokens.accentSolid || "#28DCA7"
             font.pixelSize: 10
+        }
+    }
+
+    Popup {
+        id: speedPopup
+        parent: Overlay.overlay
+        modal: false
+        focus: true
+        width: 93
+        height: 184
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 7
+            color: root.tokens.panelGlassStrong || "#1B1D2A"
+            border.color: root.tokens.panelBorder || "#23515A"
+        }
+        contentItem: ColumnLayout {
+            spacing: 1
+            Repeater {
+                model: [0.25,0.5,1,1.5,2]
+                Button {
+                    required property real modelData
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    text: root.speedText(modelData)
+                    onClicked: { root.speedEdited(modelData); speedPopup.close(); }
+                    background: Rectangle {
+                        radius: 4
+                        color: Math.abs(root.editSpeed-modelData)<.001 ?
+                            (root.tokens.accentTint || "#2E274D") : "transparent"
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 11
+                        color: Math.abs(root.editSpeed-modelData)<.001 ?
+                            (root.tokens.accentSolid || "#29C7AC") : (root.tokens.textPrimary || "#E6F6F6")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: volumePopup
+        parent: Overlay.overlay
+        modal: false
+        focus: true
+        width: 268
+        height: 225
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 10
+            color: root.tokens.panelGlassStrong || "#1B1D2A"
+            border.color: root.tokens.panelBorder || "#23515A"
+        }
+        contentItem: ColumnLayout {
+            spacing: 7
+            Text { text: "TRIM AUDIO"; font.pixelSize: 10; font.bold: true; color: root.tokens.textSecondary || "#85AAB1" }
+            Text { text: "Export volume"; font.pixelSize: 12; font.bold: true; color: root.tokens.textPrimary || "#E6F6F6" }
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: root.audioVolumePercent+"%"
+                    font.pixelSize: 22; font.bold: true; color: root.tokens.textPrimary || "#E6F6F6"
+                }
+                Item { Layout.fillWidth: true }
+                Text { text: "Original sound level: 100%"; font.pixelSize: 9; color: root.tokens.textSecondary || "#85AAB1" }
+            }
+            Slider {
+                Layout.fillWidth: true
+                from: 0; to: 100; stepSize: 1
+                value: root.audioVolumePercent
+                onMoved: root.audioVolumeEdited(Math.round(value))
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "0% · No sound"; font.pixelSize: 9; color: root.tokens.textSecondary || "#85AAB1" }
+                Item { Layout.fillWidth: true }
+                Text { text: "100% · Original"; font.pixelSize: 9; color: root.tokens.textSecondary || "#85AAB1" }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 5
+                Repeater {
+                    model: [25,50,75,100]
+                    RibbonButton {
+                        required property int modelData
+                        Layout.fillWidth: true
+                        text: modelData+"%"
+                        onClicked: root.audioVolumeEdited(modelData)
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Button {
+                    id: muteControl
+                    text: root.audioVolumePercent===0 ? "Unmute audio" : "Mute audio"
+                    font.pixelSize: 10
+                    onClicked: root.audioVolumeEdited(root.audioVolumePercent===0 ?
+                        Math.max(1,root.lastAudibleVolume) : 0)
+                    background: Item {}
+                    contentItem: Text {
+                        text: muteControl.text
+                        font.family: muteControl.font.family
+                        font.pixelSize: muteControl.font.pixelSize
+                        color: root.tokens.accentSolid || "#29C7AC"
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    id: resetVolume
+                    text: "Reset to 100%"
+                    font.pixelSize: 10
+                    onClicked: root.audioVolumeEdited(100)
+                    background: Item {}
+                    contentItem: Text {
+                        text: resetVolume.text
+                        font.family: resetVolume.font.family
+                        font.pixelSize: resetVolume.font.pixelSize
+                        color: root.tokens.textPrimary || "#E6F6F6"
+                    }
+                }
+            }
         }
     }
 }

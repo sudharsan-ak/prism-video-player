@@ -136,11 +136,27 @@ Rectangle {
                 font.pixelSize: 11; color: root.ink
             }
             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: root.line }
-            TrimButton { id: speedButton; text: "▸  "+root.speedText(root.playbackSpeed); onClicked: speedPopup.open() }
+            TrimButton {
+                id: speedButton
+                text: "▸  "+root.speedText(root.playbackSpeed)
+                onClicked: {
+                    const pos = speedButton.mapToItem(speedPopup.parent, 0, 0);
+                    speedPopup.x = Math.max(8, Math.min(speedPopup.parent.width-speedPopup.width-8,
+                        pos.x+speedButton.width-speedPopup.width));
+                    speedPopup.y = Math.max(8, pos.y-speedPopup.height-8);
+                    speedPopup.open();
+                }
+            }
             TrimButton {
                 id: soundButton
                 text: root.audioVolumePercent===0 ? "♫  Sound off  ▾" : "♫  Sound on  ▾"
-                onClicked: volumePopup.open()
+                onClicked: {
+                    const pos = soundButton.mapToItem(volumePopup.parent, 0, 0);
+                    volumePopup.x = Math.max(8, Math.min(volumePopup.parent.width-volumePopup.width-8,
+                        pos.x+soundButton.width-volumePopup.width));
+                    volumePopup.y = Math.max(8, pos.y-volumePopup.height-8);
+                    volumePopup.open();
+                }
             }
         }
 
@@ -348,9 +364,6 @@ Rectangle {
         focus: true
         width: 93
         height: 184
-        x: Math.max(8,Math.min(parent.width-width-8,
-            speedButton.mapToItem(null,0,0).x+speedButton.width-width))
-        y: Math.max(8,speedButton.mapToItem(null,0,0).y-height-8)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
             radius: 7
@@ -391,9 +404,6 @@ Rectangle {
         focus: true
         width: 268
         height: 225
-        x: Math.max(8,Math.min(parent.width-width-8,
-            soundButton.mapToItem(null,0,0).x+soundButton.width-width))
-        y: Math.max(8,soundButton.mapToItem(null,0,0).y-height-8)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
             radius: 10
