@@ -7,13 +7,22 @@ import QtQuick.Layouts
 // scrubs mpv position; export cuts at the exact chosen times.
 Rectangle {
     id: root
-    height: 175
+    height: 224
     color: tokens.panelGlass || "#20202B"
     border.color: tokens.panelBorder || "transparent"
     border.width: 1
 
     property var tokens: themeController.tokens
     property real duration: 0
+    property real sourceDuration: 0
+    property var displaySegments: []
+    property int selectedSegmentId: -1
+    property real keptDuration: 0
+    property real keptPosition: 0
+    property bool canUndo: false
+    property bool canRedo: false
+    property bool segmentEditing: false
+    property string segmentWarning: ""
     property real position: 0
     property real startTime: 0
     property real endTime: 0
@@ -39,6 +48,17 @@ Rectangle {
     signal audioVolumeEdited(int percent)
     signal resetRequested()
     signal exportRequested()
+    signal splitRequested()
+    signal softDeleteRequested()
+    signal restoreSegmentRequested()
+    signal removeGapRequested(int segmentId)
+    signal undoRequested()
+    signal redoRequested()
+    signal jumpNextRequested()
+    signal normalPlaybackRequested()
+    signal segmentSelected(int segmentId)
+    signal segmentSelectedAt(real visualSeconds)
+    signal playbackSeekRequested(real editedSeconds)
 
     function seekTimeAtPixel(pixelX) {
         if (root.duration <= 0 || frameTrack.width <= 0)
@@ -70,7 +90,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 10
             Text {
-                text: "TRIM TIMELINE"
+                text: root.segmentEditing ? "SEGMENT TIMELINE" : "TRIM TIMELINE"
                 color: root.tokens.textPrimary || "#fff"
                 font.pixelSize: 11
                 font.bold: true
@@ -115,34 +135,116 @@ Rectangle {
                     anchors.fill: parent
                     spacing: 0
                     Repeater {
-                        model: videoThumbnailController.frames.length > 0
-                            ? videoThumbnailController.frames : Array(16).fill("")
+                        model: root.displaySegments
                         Item {
-                            width: frameTrack.width / 16
+                            id: segmentTile
+                            required property var modelData
+                            property var seg: modelData
+                            width: Math.max(0, seg.visualEnd-seg.visualStart) /
+                                Math.max(root.duration,0.001) * frameTrack.width
                             height: frameTrack.height
                             clip: true
+                            visible: width > 0.5
                             Rectangle {
                                 anchors.fill: parent
-                                color: index % 2 === 0 ? "#24242E" : "#343441"
+                                color: root.tokens.videoCardBackground || "#12171A"
                             }
-                            Image {
+                            Row {
                                 anchors.fill: parent
-                                source: modelData
-                                fillMode: Image.PreserveAspectCrop
-                                cache: false
-                                asynchronous: true
-                                visible: status === Image.Ready
+                                spacing: 0
+                                Repeater {
+                                    model: Math.max(1,Math.ceil(segmentTile.width/50))
+                                    Item {
+                                        property real sourceSecond: segmentTile.seg.start +
+                                            (index+0.5)/Math.max(1,Math.ceil(segmentTile.width/50))
+                                            * (segmentTile.seg.end-segmentTile.seg.start)
+                                        width: segmentTile.width /
+                                            Math.max(1,Math.ceil(segmentTile.width/50))
+                                        height: segmentTile.height
+                                        Image {
+                                            anchors.fill: parent
+                                            property var frames: videoThumbnailController.frames
+                                            source: frames.length ?
+                                                frames[Math.min(frames.length-1,Math.max(0,
+                                                  Math.floor(sourceSecond /
+                                                    Math.max(root.sourceDuration,0.001)*frames.length)))] : ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            cache: false
+                                            asynchronous: true
+                                        }
+                                    }
+                                }
                             }
                             Rectangle {
-                                anchors.right: parent.right
-                                width: 1
-                                height: parent.height
-                                color: "#55000000"
+                                anchors.fill: parent
+                                color: "#AA0A1117"
+                                visible: segmentTile.seg.removed
+                            }
+                            Repeater {
+                                model: segmentTile.seg.removed ? Math.ceil(segmentTile.width/12)+5 : 0
+                                Rectangle {
+                                    x: index*12-32; y: -15
+                                    width: 2; height: segmentTile.height+50
+                                    rotation: 40
+                                    color: "#6685A5A4"
+                                }
+                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "transparent"
+                                border.width: root.selectedSegmentId === segmentTile.seg.id ? 2 : 1
+                                border.color: root.selectedSegmentId === segmentTile.seg.id
+                                    ? (root.tokens.accentSolid || "#28DCA7") : "#55777777"
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
+                                onClicked: root.segmentSelected(segmentTile.seg.id)
+                                onDoubleClicked: function(mouse) {
+                                    const pt=mapToItem(frameTrack,mouse.x,mouse.y);
+                                    root.seekRequested(root.seekTimeAtPixel(pt.x));
+                                }
+                            }
+                            Button {
+                                id: gapButton
+                                anchors.centerIn: parent
+                                visible: segmentTile.seg.removed && segmentTile.width > 105
+                                width: Math.min(112,segmentTile.width-12)
+                                height: 24
+                                text: "▣ Remove Gap"
+                                font.pixelSize: 10
+                                onClicked: {
+                                    root.segmentSelected(segmentTile.seg.id);
+                                    root.removeGapRequested(segmentTile.seg.id);
+                                }
+                                background: Rectangle {
+                                    radius: 6
+                                    color: gapButton.hovered ? (root.tokens.accentTint || "#29463A")
+                                                             : (root.tokens.panelGlassStrong || "#131B1E")
+                                    border.color: root.tokens.accentSolid || "#28DCA7"
+                                }
+                                contentItem: Text {
+                                    text: gapButton.text
+                                    font: gapButton.font
+                                    color: root.tokens.textPrimary || "#fff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                anchors.left: parent.left
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 3
+                                text: root.timeText(segmentTile.seg.end-segmentTile.seg.start)
+                                visible: segmentTile.width > 68
+                                font.pixelSize: 9
+                                color: "#FFF"
+                                style: Text.Outline
+                                styleColor: "#111"
                             }
                         }
                     }
                 }
-
                 Text {
                     anchors.centerIn: parent
                     visible: videoThumbnailController.error.length > 0
@@ -178,14 +280,7 @@ Rectangle {
                 live: true
                 first.onMoved: root.startTimeEdited(first.value)
                 second.onMoved: root.endTimeEdited(second.value)
-                first.onPressedChanged: {
-                    if (!first.pressed)
-                        root.seekRequested(root.startTime)
-                }
-                second.onPressedChanged: {
-                    if (!second.pressed)
-                        root.seekRequested(root.endTime)
-                }
+                // IN/OUT adjustments never seek or move the playhead.
                 background: Item {}
                 first.handle: Rectangle {
                     HoverHandler { cursorShape: Qt.SizeHorCursor }
@@ -273,10 +368,13 @@ Rectangle {
                             frameTrack, mouse.x, mouse.y).x;
                         // The click was inside the selected region, so do
                         // not change either trim boundary.
-                        root.seekRequested(Math.max(root.startTime, Math.min(root.endTime,
-                                                root.seekTimeAtPixel(pointerX))));
+                        root.segmentSelectedAt(root.seekTimeAtPixel(pointerX));
                     }
                     dragActivated = false;
+                }
+                onDoubleClicked: function(mouse) {
+                    const pt=moveSelectionArea.mapToItem(frameTrack,mouse.x,mouse.y);
+                    root.seekRequested(root.seekTimeAtPixel(pt.x));
                 }
                 onCanceled: dragActivated = false
             }
@@ -356,9 +454,9 @@ Rectangle {
         ThemedSeekBar {
             Layout.fillWidth: true
             Layout.preferredHeight: 22
-            mediaPosition: root.position
-            mediaDuration: root.duration
-            onSeekRequested: function(seconds) { root.seekRequested(seconds); }
+            mediaPosition: root.keptPosition
+            mediaDuration: root.keptDuration
+            onSeekRequested: function(seconds) { root.playbackSeekRequested(seconds); }
         }
 
         RowLayout {
@@ -371,18 +469,42 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             Text {
-                text: "Playhead: " + root.timeText(root.position)
+                text: "Playhead: " + root.timeText(root.keptPosition)
                 font.pixelSize: 10
                 color: root.tokens.textSecondary || "#aaa"
             }
             Item { Layout.fillWidth: true }
             Text {
-                text: root.timeText(root.duration)
+                text: root.timeText(root.keptDuration)
                 font.pixelSize: 10
                 color: root.tokens.textMuted || "#888"
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 5
+            Button { text: "✂ Split selection"; onClicked: root.splitRequested() }
+            Button { text: "Soft Delete"; onClicked: root.softDeleteRequested() }
+            Button { text: "Restore"; onClicked: root.restoreSegmentRequested() }
+            Button { text: "Remove Gap"; onClicked: root.removeGapRequested(root.selectedSegmentId) }
+            Button { text: "↶ Undo"; enabled: root.canUndo; onClicked: root.undoRequested() }
+            Button { text: "↷ Redo"; enabled: root.canRedo; onClicked: root.redoRequested() }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: root.displaySegments.length + " segments · " +
+                      root.timeText(root.keptDuration/Math.max(0.25,root.editSpeed)) + " export"
+                color: root.tokens.textSecondary || "#aaa"
+                font.pixelSize: 10
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: root.segmentWarning.length > 0
+            text: root.segmentWarning
+            color: root.tokens.accentSolid || "#28DCA7"
+            font.pixelSize: 10
+        }
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -459,6 +581,18 @@ Rectangle {
                         }
                     }
                 }
+            }
+            TrimButton {
+                text: "Normal play"
+                onClicked: root.normalPlaybackRequested()
+                ToolTip.text: "Continue from the current playhead"
+                ToolTip.visible: hovered
+            }
+            TrimButton {
+                text: "Jump next"
+                onClicked: root.jumpNextRequested()
+                ToolTip.text: "Seek to the next retained segment"
+                ToolTip.visible: hovered
             }
             TrimButton {
                 id: speedButton
