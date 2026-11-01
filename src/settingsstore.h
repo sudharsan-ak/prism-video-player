@@ -22,6 +22,7 @@ class SettingsStore : public QObject {
     Q_PROPERTY(QString gifQualityPreset READ gifQualityPreset WRITE setGifQualityPreset NOTIFY gifQualityPresetChanged)
     Q_PROPERTY(QString mp4ExportMode READ mp4ExportMode WRITE setMp4ExportMode NOTIFY mp4ExportModeChanged)
     Q_PROPERTY(QString gifExportMode READ gifExportMode WRITE setGifExportMode NOTIFY gifExportModeChanged)
+    Q_PROPERTY(bool editorToolbarExpanded READ editorToolbarExpanded WRITE setEditorToolbarExpanded NOTIFY editorToolbarExpandedChanged)
 
 public:
     explicit SettingsStore(QObject *parent = nullptr);
@@ -50,6 +51,9 @@ public:
     QString gifExportMode() const { return m_gifExportMode; }
     void setGifExportMode(const QString &mode);
 
+    bool editorToolbarExpanded() const { return m_editorToolbarExpanded; }
+    void setEditorToolbarExpanded(bool expanded);
+
     Q_INVOKABLE void bumpRecent(const QString &path);
     Q_INVOKABLE void clearRecent();
     Q_INVOKABLE void removeRecent(const QString &path);
@@ -75,6 +79,7 @@ signals:
     void mp4ExportModeChanged();
     void gifExportModeChanged();
     void resumeEnabledChanged();
+    void editorToolbarExpandedChanged();
 
 private:
     void load();
@@ -93,6 +98,7 @@ private:
     // those settings to opt into the new one-click destructive behavior.
     bool m_replaceModeConfirmed = false;
     QString m_gifExportMode = QStringLiteral("auto");
+    bool m_editorToolbarExpanded = true;
     QVariantMap m_resumePositions;   // path -> seconds
     QVariantMap m_bookmarks;         // path -> list of {time, label}
 };

@@ -22,6 +22,7 @@ Item {
     signal contextMenuRequested(point pos)
     signal mouseActivity()
     signal singleClicked()
+    signal doubleClicked()
 
     MpvObject {
         id: mpvObject
@@ -42,7 +43,7 @@ Item {
         }
         onDoubleClicked: function(mouse) {
             if (mouse.button === Qt.LeftButton)
-                playerController.togglePause();
+                root.doubleClicked();
         }
         onWheel: function(wheel) {
             const delta = wheel.angleDelta.y > 0 ? 5 : -5;

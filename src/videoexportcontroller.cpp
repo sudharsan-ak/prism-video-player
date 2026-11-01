@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QVariantMap>
 #include <QStandardPaths>
 #include <QTimer>
 #ifdef Q_OS_WIN
@@ -128,6 +129,24 @@ bool VideoExportController::startGif(const QString &sourcePath, double startSeco
                      quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
+bool VideoExportController::startSegments(const QString &sourcePath, const QVariantList &ranges,
+                                          const QUrl &destination, bool animatedGif,
+                                          double playbackSpeed, int audioVolumePercent,
+                                          const QString &encodingPreset, const QString &gifQuality,
+                                          int quarterTurns, double cropX, double cropY,
+                                          double cropWidth, double cropHeight)
+{
+    if (ranges.isEmpty())
+        return false;
+    const QVariantMap first = ranges.first().toMap();
+    const QVariantMap last = ranges.last().toMap();
+    return beginTrim(sourcePath, first.value(QStringLiteral("start")).toDouble(),
+                     last.value(QStringLiteral("end")).toDouble(), destination,
+                     false, playbackSpeed, audioVolumePercent, animatedGif,
+                     encodingPreset, gifQuality, quarterTurns,
+                     cropX, cropY, cropWidth, cropHeight, ranges);
+}
+
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
                                       bool replaceOriginal, double playbackSpeed,
@@ -135,7 +154,8 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
                                       const QString &encodingPreset,
                                       const QString &gifQuality, int quarterTurns,
                                       double cropX, double cropY,
-                                      double cropWidth, double cropHeight)
+                                      double cropWidth, double cropHeight,
+                                      const QVariantList &ranges)
 {
     if (m_busy)
         return false;
@@ -182,6 +202,31 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         startSeconds < 0.0 || endSeconds - startSeconds < 0.1) {
         fail(QStringLiteral("Trim end must be at least 0.1 seconds after the start."));
         return false;
+    }
+    QList<QPair<double,double>> slices;
+    double summedDuration = 0.0, previousEnd = -1;
+    if (!ranges.isEmpty()) {
+        if (replaceOriginal || ranges.size() > 100) {
+            fail(QStringLiteral("Segment export cannot replace the original or exceed 100 pieces."));
+            return false;
+        }
+        for (const QVariant &value : ranges) {
+            const QVariantMap item = value.toMap();
+            if (!item.contains(QStringLiteral("start")) || !item.contains(QStringLiteral("end"))) {
+                fail(QStringLiteral("Invalid segment export range."));
+                return false;
+            }
+            const double a = item.value(QStringLiteral("start")).toDouble();
+            const double b = item.value(QStringLiteral("end")).toDouble();
+            if (!std::isfinite(a) || !std::isfinite(b) || a < 0 ||
+                b-a < 0.05 || a < previousEnd-0.0001) {
+                fail(QStringLiteral("Segment export ranges must be ordered and nonoverlapping."));
+                return false;
+            }
+            slices.append(qMakePair(a,b));
+            summedDuration += b-a;
+            previousEnd = b;
+        }
     }
     const QString inputCanonical = source.canonicalFilePath();
     const bool sameFile = inputCanonical.compare(output.absoluteFilePath(), Qt::CaseInsensitive) == 0;
@@ -239,7 +284,7 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral(".prism-export-%1.%2")
             .arg(QUuid::createUuid().toString(QUuid::WithoutBraces), extension));
     const double sourceDuration = endSeconds - startSeconds;
-    m_clipDuration = sourceDuration / playbackSpeed;
+    m_clipDuration = (slices.isEmpty() ? sourceDuration : summedDuration) / playbackSpeed;
     m_progress = 0.0;
     m_progressBuffer.clear();
     m_lastStderr.clear();
@@ -292,11 +337,51 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
         QStringLiteral("-loglevel"), QStringLiteral("error"),
         QStringLiteral("-stats_period"), QStringLiteral("0.25"),
         QStringLiteral("-progress"), QStringLiteral("pipe:1"),
-        QStringLiteral("-n"), QStringLiteral("-ss"), QString::number(startSeconds, 'f', 3),
-        QStringLiteral("-t"), QString::number(sourceDuration, 'f', 3),
-        QStringLiteral("-protocol_whitelist"), QStringLiteral("file,crypto,data"),
-        QStringLiteral("-i"), source.absoluteFilePath()
+        QStringLiteral("-n")
     };
+    if (slices.isEmpty()) {
+        args << QStringLiteral("-ss") << QString::number(startSeconds, 'f', 3)
+             << QStringLiteral("-t") << QString::number(sourceDuration, 'f', 3);
+    }
+    args << QStringLiteral("-protocol_whitelist") << QStringLiteral("file,crypto,data")
+         << QStringLiteral("-i") << source.absoluteFilePath();
+
+    // Multi-range video uses trim/setpts per source range then concat.
+    // Audio uses aselect/asetpts on the optional first audio stream.
+    // One FFmpeg invocation encodes all retained segments without ever
+    // rewriting, truncating or moving the source media.
+    QString multiGraph;
+    QString multiAudio;
+    if (!slices.isEmpty()) {
+        const int n = slices.size();
+        QStringList parts;
+        if (n > 1) {
+            QString split = QStringLiteral("[0:v]split=%1").arg(n);
+            for (int i=0;i<n;++i) split += QStringLiteral("[vs%1]").arg(i);
+            parts << split;
+        }
+        QString inputs;
+        QStringList audioClauses;
+        for (int i=0;i<n;++i) {
+            const double a=slices[i].first, b=slices[i].second;
+            const QString ts = QStringLiteral("trim=start=%1:end=%2,setpts=PTS-STARTPTS")
+                .arg(a,0,'f',6).arg(b,0,'f',6);
+            parts << QStringLiteral("%1%2[v%3]")
+                .arg(n>1 ? QStringLiteral("[vs%1]").arg(i) : QStringLiteral("[0:v]"))
+                .arg(ts).arg(i);
+            inputs += QStringLiteral("[v%1]").arg(i);
+            audioClauses << QStringLiteral("between(t\\,%1\\,%2)")
+                .arg(a,0,'f',6).arg(b,0,'f',6);
+        }
+        if (n > 1)
+            parts << inputs + QStringLiteral("concat=n=%1:v=1:a=0[joined]").arg(n);
+        else
+            parts << QStringLiteral("[v0]null[joined]");
+        parts << QStringLiteral("[joined]%1[vout]").arg(videoFilter);
+        multiGraph = parts.join(QStringLiteral(";"));
+        multiAudio = QStringLiteral("aselect='%1',asetpts=N/SR/TB,%2")
+            .arg(audioClauses.join(QStringLiteral("+")),audioFilter);
+    }
     if (animatedGif) {
         // Palette from the first two output seconds keeps GIF startup
         // fast. Balanced/Compact prioritize file size and fewer colors.
@@ -317,27 +402,36 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
             "palettegen=%4[palette];"
             "[frames][palette]paletteuse=%5[gifout]")
                 .arg(videoFilter).arg(fps).arg(width).arg(paletteOptions).arg(useOptions);
-        args << QStringLiteral("-filter_complex") << gifFilter
+        const QString graph = slices.isEmpty() ? gifFilter :
+            multiGraph + QStringLiteral(";") +
+            QString(gifFilter).replace(QStringLiteral("[0:v]%1,").arg(videoFilter),
+                                       QStringLiteral("[vout]"));
+        args << QStringLiteral("-filter_complex") << graph
              << QStringLiteral("-map") << QStringLiteral("[gifout]")
              << QStringLiteral("-an")
              << QStringLiteral("-loop") << QStringLiteral("0")
              << QStringLiteral("-f") << QStringLiteral("gif");
     } else {
-        args << QStringLiteral("-map") << QStringLiteral("0:V:0");
+        if (slices.isEmpty()) {
+            args << QStringLiteral("-map") << QStringLiteral("0:V:0");
+        } else {
+            args << QStringLiteral("-filter_complex") << multiGraph
+                 << QStringLiteral("-map") << QStringLiteral("[vout]");
+        }
         if (audioVolumePercent == 0) {
             // No audio stream is encoded, not just a stream of silence.
             args << QStringLiteral("-an");
         } else {
             args << QStringLiteral("-map") << QStringLiteral("0:a:0?")
-                 << QStringLiteral("-af") << audioFilter
+                 << QStringLiteral("-af") << (slices.isEmpty() ? audioFilter : multiAudio)
                  << QStringLiteral("-c:a") << QStringLiteral("aac")
                  << QStringLiteral("-b:a") << QStringLiteral("192k");
         }
+        if (slices.isEmpty()) args << QStringLiteral("-vf") << videoFilter;
         args << QStringLiteral("-c:v") << QStringLiteral("libx264")
              << QStringLiteral("-preset")
              << m_encodingPresetForJob
              << QStringLiteral("-crf") << QStringLiteral("18")
-             << QStringLiteral("-vf") << videoFilter
              << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
              << QStringLiteral("-movflags") << QStringLiteral("+faststart")
              << QStringLiteral("-f") << QStringLiteral("mp4");

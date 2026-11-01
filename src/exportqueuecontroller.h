@@ -38,6 +38,11 @@ public:
                              const QUrl &destination, double speed,
                              int quarterTurns = 0, double cropX = 0, double cropY = 0,
                              double cropWidth = 1, double cropHeight = 1);
+    Q_INVOKABLE bool queueSegments(const QString &source, const QVariantList &ranges,
+                                  const QUrl &destination, bool gif,
+                                  double speed, int audioVolumePercent,
+                                  int quarterTurns, double cropX, double cropY,
+                                  double cropWidth, double cropHeight);
     Q_INVOKABLE void cancelJob(int id);
     Q_INVOKABLE void clearFinished();
 
@@ -60,6 +65,7 @@ private:
         double progress = 0.0;
         qint64 sourceSize = 0;
         QDateTime sourceModified;
+        QVariantList ranges;
         int audioVolumePercent = 100;
         int quarterTurns = 0;
         double cropX = 0;
@@ -72,7 +78,7 @@ private:
     bool enqueue(const QString &source, double start, double end,
                  const QUrl &destination, double speed, int audioVolumePercent, bool gif,
                  int quarterTurns, double cropX, double cropY, double cropWidth,
-                 double cropHeight);
+                 double cropHeight, const QVariantList &ranges = {});
     bool isReserved(const QString &output) const;
     Job *findJob(int id);
     void scheduleNext();

@@ -62,7 +62,9 @@ qt_add_qml_module(Prism
         qml/CollapsibleEditorSection.qml
         qml/RotateControls.qml
         qml/CropOverlay.qml
+        qml/QuickTrimTimeline.qml
         qml/EditorTimeline.qml
+        qml/EditSegments.qml
         qml/BottomControlBar.qml
         qml/FullscreenOverlay.qml
         qml/OsdOverlay.qml

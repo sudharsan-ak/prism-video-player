@@ -17,6 +17,7 @@ Rectangle {
     property bool libraryOpen: false
     property bool adjustmentsOpen: false
     property bool editorActive: false
+    property bool sidebarOpen: false
     property int outstandingExports: 0
 
     signal libraryToggled()
@@ -25,6 +26,7 @@ Rectangle {
     signal addFolderRequested()
     signal loadSubtitleRequested()
     signal editRequested()
+    signal sidebarToggleRequested()
     signal queueRequested()
 
     // Native title bar is disabled (frameless window), so this bar must
@@ -157,6 +159,44 @@ Rectangle {
             MouseArea { anchors.fill: parent; onClicked: root.libraryToggled() }
         }
 
+    }
+
+    Rectangle {
+        id: sidebarToggleButton
+        visible: root.editorActive
+        anchors.right: exportQueueEntry.left
+        anchors.rightMargin: 8
+        anchors.verticalCenter: parent.verticalCenter
+        height: 25
+        width: 30
+        radius: 7
+        color: root.sidebarOpen
+            ? (root.tokens.accentTint || "#333") : "transparent"
+        border.color: root.tokens.panelBorder || "#444"
+        border.width: 1
+        Column {
+            anchors.centerIn: parent
+            spacing: 3
+            Repeater {
+                model: 3
+                Rectangle {
+                    width: 14
+                    height: 2
+                    radius: 1
+                    color: root.sidebarOpen
+                        ? (root.tokens.accentSolid || "#A89BFF")
+                        : (root.tokens.textSecondary || "#888")
+                }
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.sidebarToggleRequested()
+            ToolTip.visible: containsMouse
+            ToolTip.text: root.sidebarOpen ? "Hide edit panel" : "Show edit panel"
+        }
     }
 
     Rectangle {

@@ -37,10 +37,134 @@ ApplicationWindow {
     }
 
     property bool editMode: false
+    // Edit always opens in the simple trim screen. Advanced cuts are session state.
+    property string editorScreen: "quick"
+    // Independent of editorScreen so the same side panel is reachable from
+    // Quick Trim and Advanced Editor without forcing a screen switch.
+    property bool sidebarOpen: false
     property string editSourcePath: ""
     property real editStart: 0
     property real editEnd: 0
     property bool previewSelectionPlaying: false
+    property bool normalEditPlaybackPlaying: false
+    EditSegments { id: editCuts }
+
+    function splitEditSelection() {
+        stopRangePreview();
+        if (!editCuts.splitSelection(editStart,editEnd)) {
+            toast.show(editCuts.warning, false);
+        }
+    }
+    function deleteEditSegment() {
+        stopRangePreview();
+        if (!editCuts.softDelete()) toast.show(editCuts.warning || "Select a segment first.", false);
+    }
+    function seekEditVisual(t) {
+        stopRangePreview();
+        playerController.seek(editCuts.visualToSource(t));
+    }
+    function jumpNextKept() {
+        const current = videoSurface.mpv ? videoSurface.mpv.position : 0;
+        const next = editCuts.nextKeptStart(current);
+        if (next >= 0) {
+            stopRangePreview();
+            playerController.seek(next);
+        }
+    }
+    function toggleNormalEditPlayback() {
+        if (!editMode) return;
+        if (normalEditPlaybackPlaying && videoSurface.mpv && !videoSurface.mpv.paused) {
+            stopRangePreview();
+            return;
+        }
+        const mpv=videoSurface.mpv;
+        if (!mpv) return;
+        let current=mpv.position;
+        const playable=!mpv.eofReached &&
+            editCuts.keptRanges.some(r => current >= r.start && current < r.end-0.02);
+        if (!playable) {
+            const next=editCuts.keptRanges.find(r => r.start > current+0.0001);
+            current=next ? next.start : editCuts.keptRanges.length ? editCuts.keptRanges[0].start : 0;
+            playerController.seek(current);
+        }
+        previewSelectionPlaying=false;
+        normalEditPlaybackPlaying=true;
+        playerController.setSpeed(editSpeed);
+        playerController.setPaused(false);
+    }
+    // Quick Trim deliberately exports source IN/OUT only, even when a user
+    // previously made advanced cuts during this editing session.
+    function queueQuickTrimCopy() {
+        if (!editMode || editorScreen !== "quick" || !exportQueue.canQueue)
+            return;
+        const destination = exportQueue.suggestedOutputUrl(editSourcePath, false);
+        if (!destination || destination.toString().length === 0) {
+            toast.show("Could not find an available copy filename.", true);
+            return;
+        }
+        const ok = exportQueue.queueMp4(editSourcePath, editStart, editEnd,
+                                        destination, editSpeed, editVolumePercent, 0, 0, 0, 1, 1);
+        toast.show(ok ? "Trimmed MP4 copy added to export queue." : exportQueue.lastError, !ok);
+    }
+
+    function requestQuickTrimSave() {
+        if (!editMode || editorScreen !== "quick")
+            return;
+        if (!editSourcePath.toLowerCase().endsWith(".mp4")) {
+            toast.show("Overwriting the original is supported only for MP4 files. Use Save as Copy.", true);
+            return;
+        }
+        if (exportQueue.hasOutstanding || videoExportController.busy) {
+            toast.show("Finish queued exports before replacing the original.", true);
+            return;
+        }
+        if (editEnd - editStart < 0.1) {
+            toast.show("Select at least 0.1 seconds to save.", true);
+            return;
+        }
+        quickSaveConfirm.open();
+    }
+
+    function overwriteQuickTrim() {
+        if (!editMode || editorScreen !== "quick" ||
+            exportQueue.hasOutstanding || videoExportController.busy)
+            return;
+        stopRangePreview();
+        // Quick Trim applies only visible range, speed and volume.
+        // Hidden advanced cuts, crop and rotation are intentionally ignored.
+        if (!videoExportController.startReplaceTrim(editSourcePath,editStart,editEnd,
+                                                     editSpeed,editVolumePercent,0,0,0,1,1))
+            toast.show(videoExportController.error || "Could not start replacement.", true);
+    }
+
+    function toggleQuickTrimPlayback() {
+        if (!editMode || editorScreen !== "quick" || editEnd-editStart < 0.1)
+            return;
+        if (previewSelectionPlaying && videoSurface.mpv && !videoSurface.mpv.paused) {
+            stopRangePreview();
+            return;
+        }
+        stopRangePreview();
+        playerController.seek(editStart);
+        playerController.setSpeed(editSpeed);
+        previewSelectionPlaying = true;
+        playerController.setPaused(false);
+    }
+
+    function queueEditSegments(gif,destination) {
+        if (editCuts.hasCuts)
+            return exportQueue.queueSegments(editSourcePath,editCuts.keptRanges,
+                    destination,gif,editSpeed,editVolumePercent,editQuarterTurns,
+                    editCropX,editCropY,editCropWidth,editCropHeight);
+        return gif
+            ? exportQueue.queueGif(editSourcePath, editStart, editEnd,
+                                   destination, editSpeed, editQuarterTurns,
+                                   editCropX, editCropY, editCropWidth, editCropHeight)
+            : exportQueue.queueMp4(editSourcePath, editStart, editEnd,
+                                   destination, editSpeed, editVolumePercent,
+                                   editQuarterTurns, editCropX, editCropY,
+                                   editCropWidth, editCropHeight);
+    }
     property real editSpeed: 1.0
     property real normalPlaybackSpeed: 1.0
     property int editVolumePercent: 100
@@ -132,6 +256,7 @@ ApplicationWindow {
 
     function stopRangePreview() {
         previewSelectionPlaying = false;
+        normalEditPlaybackPlaying = false;
         playerController.setPaused(true);
     }
 
@@ -143,9 +268,13 @@ ApplicationWindow {
             return;
         }
         const mpv = videoSurface.mpv;
-        if (!mpv || mpv.position < editStart || mpv.position >= editEnd - 0.05)
-            playerController.seek(editStart);
+        // Play Range explicitly starts at IN. Normal Play remains at
+        // the manually chosen playhead position.
+        const within = editCuts.keptRanges.find(r=>r.end > editStart+0.001 && r.start < editEnd);
+        if (!within) return;
+        playerController.seek(Math.max(editStart,within.start));
         playerController.setSpeed(editSpeed);
+        normalEditPlaybackPlaying = false;
         previewSelectionPlaying = true;
         playerController.setPaused(false);
     }
@@ -181,7 +310,10 @@ ApplicationWindow {
         editSourcePath = mpv.mediaPath;
         editStart = 0;
         editEnd = mpv.duration;
+        editCuts.reset(mpv.duration);
+        editorScreen = "quick";
         previewSelectionPlaying = false;
+        normalEditPlaybackPlaying = false;
         playerController.setPaused(true);
         libraryOpen = false;
         adjustmentsOpen = false;
@@ -196,11 +328,13 @@ ApplicationWindow {
             return;
         }
         previewSelectionPlaying = false;
+        normalEditPlaybackPlaying = false;
         playerController.setPaused(true);
         playerController.setSpeed(normalPlaybackSpeed);
         restorePlaybackAudio();
         restorePlaybackRotation();
         editMode = false;
+        editorScreen = "quick";
         videoThumbnailController.stop();
         globalShortcuts.forceActiveFocus();
     }
@@ -217,14 +351,7 @@ ApplicationWindow {
             toast.show("Could not find an available output filename. Choose a location instead.", true);
             return;
         }
-        const ok = animatedGif
-            ? exportQueue.queueGif(editSourcePath, editStart, editEnd,
-                                   destination, editSpeed, editQuarterTurns,
-                                   editCropX, editCropY, editCropWidth, editCropHeight)
-            : exportQueue.queueMp4(editSourcePath, editStart, editEnd,
-                                   destination, editSpeed, editVolumePercent,
-                                   editQuarterTurns, editCropX, editCropY,
-                                   editCropWidth, editCropHeight);
+        const ok = queueEditSegments(animatedGif,destination);
         if (!ok) {
             toast.show(exportQueue.lastError, true);
             return;
@@ -239,6 +366,10 @@ ApplicationWindow {
         const mode = settingsStore.mp4ExportMode;
         if (mode === "saveAs") {
             openTrimSaveDialog();
+        } else if (mode === "replace" && editCuts.hasCuts) {
+            // A segmented edit cannot overwrite the source video.
+            // Keep the saved preference, but force a new queued copy.
+            enqueueCurrentTrim(false);
         } else if (mode === "replace") {
             if (!editSourcePath.toLowerCase().endsWith(".mp4")) {
                 toast.show("Replacing the original is available only for MP4 files.", true);
@@ -352,9 +483,11 @@ ApplicationWindow {
             libraryOpen: prismWindow.libraryOpen
             adjustmentsOpen: prismWindow.adjustmentsOpen
             editorActive: prismWindow.editMode
+            sidebarOpen: prismWindow.sidebarOpen
             outstandingExports: exportQueue.waitingCount + (exportQueue.hasOutstanding && videoExportController.busy ? 1 : 0)
             onQueueRequested: exportQueuePopup.open()
             onEditRequested: prismWindow.editMode ? prismWindow.leaveEditing() : prismWindow.beginEditing()
+            onSidebarToggleRequested: prismWindow.sidebarOpen = !prismWindow.sidebarOpen
             onLibraryToggled: prismWindow.libraryOpen = !prismWindow.libraryOpen
             onAdjustmentsToggled: prismWindow.adjustmentsOpen = !prismWindow.adjustmentsOpen
             onOpenFilesRequested: openFilesDialog.open()
@@ -414,21 +547,98 @@ ApplicationWindow {
                     mpv: videoSurface.mpv
                 }
 
-                EditorTimeline {
-                    id: editorTimeline
+                QuickTrimTimeline {
+                    id: quickTrimTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
-                    visible: prismWindow.editMode
+                    Layout.preferredHeight: 166
+                    visible: prismWindow.editMode && prismWindow.editorScreen === "quick"
                     enabled: exportQueue.canQueue
-                    duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
+                    duration: editCuts.sourceDuration
                     position: videoSurface.mpv ? videoSurface.mpv.position : 0
                     startTime: prismWindow.editStart
                     endTime: prismWindow.editEnd
+                    playing: prismWindow.previewSelectionPlaying &&
+                             videoSurface.mpv && !videoSurface.mpv.paused
+                    sourceIsMp4: prismWindow.editSourcePath.toLowerCase().endsWith(".mp4")
+                    advancedCutsExist: editCuts.hasCuts
+                    onStartTimeEdited: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editStart = Math.max(0,Math.min(seconds,prismWindow.editEnd-.1));
+                    }
+                    onEndTimeEdited: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editEnd = Math.min(editCuts.sourceDuration,
+                            Math.max(seconds,prismWindow.editStart+.1));
+                    }
+                    onSeekRequested: function(seconds) {
+                        prismWindow.stopRangePreview();
+                        playerController.seek(seconds);
+                    }
+                    onPlayRequested: prismWindow.toggleQuickTrimPlayback()
+                    onBeginningRequested: {
+                        prismWindow.stopRangePreview();
+                        playerController.seek(prismWindow.editStart);
+                    }
+                    audioVolumePercent: prismWindow.editVolumePercent
+                    lastAudibleVolume: prismWindow.lastEditAudibleVolume
+                    playbackSpeed: prismWindow.editSpeed
+                    onSpeedEdited: function(speed) {
+                        prismWindow.editSpeed = speed;
+                        playerController.setSpeed(speed);
+                    }
+                    onVolumeEdited: function(percent) { prismWindow.setEditVolume(percent); }
+                    onResetRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editStart=0;
+                        prismWindow.editEnd=editCuts.sourceDuration;
+                    }
+                    onAdvancedRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editorScreen="advanced";
+                    }
+                    onCopyRequested: prismWindow.queueQuickTrimCopy()
+                    onSaveRequested: prismWindow.requestQuickTrimSave()
+                }
+
+                EditorTimeline {
+                    id: editorTimeline
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 250
+                    visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+                    toolbarExpanded: settings.editorToolbarExpanded
+                    onToolbarExpandedChanged: settings.editorToolbarExpanded = toolbarExpanded
+                    onQuickTrimRequested: {
+                        prismWindow.stopRangePreview();
+                        prismWindow.editorScreen = "quick";
+                    }
+                    enabled: exportQueue.canQueue
+                    duration: editCuts.visualDuration
+                    sourceDuration: editCuts.sourceDuration
+                    displaySegments: editCuts.displaySegments
+                    selectedSegmentId: editCuts.selectedId
+                    keptDuration: editCuts.keptDuration
+                    keptPosition: editCuts.sourceToKept(videoSurface.mpv ? videoSurface.mpv.position : 0)
+                    segmentEditing: editCuts.hasCuts
+                    segmentWarning: editCuts.warning
+                    canUndo: editCuts.canUndo
+                    canRedo: editCuts.canRedo
+                    selectedRemoved: editCuts.selected ? editCuts.selected.removed : false
+                    selectedCollapsed: editCuts.selected ? editCuts.selected.collapsed : false
+                    canSoftDelete: editCuts.selected && !editCuts.selected.removed &&
+                        editCuts.keptRanges.length > 1
+                    hasNextKept: editCuts.nextKeptStart(
+                        videoSurface.mpv ? videoSurface.mpv.position : 0) >= 0
+                    position: editCuts.sourceToVisual(videoSurface.mpv ? videoSurface.mpv.position : 0)
+                    startTime: editCuts.sourceToVisual(prismWindow.editStart)
+                    endTime: editCuts.sourceToVisual(prismWindow.editEnd)
                     editSpeed: prismWindow.editSpeed
                     audioVolumePercent: prismWindow.editVolumePercent
                     lastAudibleVolume: prismWindow.lastEditAudibleVolume
                     onAudioVolumeEdited: function(percent) { prismWindow.setEditVolume(percent); }
-                    previewPlaying: prismWindow.previewSelectionPlaying &&
+                    previewPlaying: (prismWindow.previewSelectionPlaying ||
+                        prismWindow.normalEditPlaybackPlaying) &&
+                        videoSurface.mpv && !videoSurface.mpv.paused
+                    rangePlaying: prismWindow.previewSelectionPlaying &&
                         videoSurface.mpv && !videoSurface.mpv.paused
                     onTogglePlaybackRequested: prismWindow.toggleEditPlayback()
                     onSpeedEdited: function(value) {
@@ -438,30 +648,71 @@ ApplicationWindow {
                     sourceIsMp4: prismWindow.editSourcePath.toLowerCase().endsWith(".mp4")
                     onRangeMoveStarted: prismWindow.stopRangePreview()
                     onRangeMoved: function(newStart, newEnd) {
-                        // Assign the leading boundary last to avoid momentary
-                        // RangeSlider handle crossing during a large drag.
-                        if (newStart > prismWindow.editStart) {
-                            prismWindow.editEnd = newEnd;
-                            prismWindow.editStart = newStart;
+                        const a=editCuts.visualToSource(newStart);
+                        const b=editCuts.visualToSource(newEnd);
+                        if (a > prismWindow.editStart) {
+                            prismWindow.editEnd=b;
+                            prismWindow.editStart=a;
                         } else {
-                            prismWindow.editStart = newStart;
-                            prismWindow.editEnd = newEnd;
+                            prismWindow.editStart=a;
+                            prismWindow.editEnd=b;
                         }
                     }
                     onRangeMoveFinished: function(newStart) {
-                        playerController.seek(newStart);
+                        // Trimming and shifting a range never seeks the video.
                     }
                     onStartTimeEdited: function(seconds) {
                         prismWindow.stopRangePreview();
-                        prismWindow.editStart = Math.max(0, Math.min(seconds, prismWindow.editEnd - 0.1));
+                        prismWindow.editStart=Math.max(0,Math.min(
+                            editCuts.visualToSource(seconds),prismWindow.editEnd-0.05));
                     }
                     onEndTimeEdited: function(seconds) {
                         prismWindow.stopRangePreview();
-                        prismWindow.editEnd = Math.min(duration, Math.max(seconds, prismWindow.editStart + 0.1));
+                        prismWindow.editEnd=Math.min(editCuts.sourceDuration,Math.max(
+                            editCuts.visualToSource(seconds),prismWindow.editStart+0.05));
                     }
-                    onSeekRequested: function(seconds) {
+                    onSeekRequested: function(seconds) { prismWindow.seekEditVisual(seconds); }
+                    onPlaybackSeekRequested: function(seconds) {
                         prismWindow.stopRangePreview();
-                        playerController.seek(seconds);
+                        playerController.seek(editCuts.keptToSource(seconds));
+                    }
+                    onSplitRequested: prismWindow.splitEditSelection()
+                    onSoftDeleteRequested: prismWindow.deleteEditSegment()
+                    onRestoreSegmentRequested: {
+                        prismWindow.stopRangePreview();
+                        editCuts.restore();
+                    }
+                    onRemoveGapRequested: function(id) {
+                        prismWindow.stopRangePreview();
+                        editCuts.select(id);
+                        editCuts.removeGap();
+                    }
+                    onUndoRequested: { prismWindow.stopRangePreview(); editCuts.undo(); }
+                    onRedoRequested: { prismWindow.stopRangePreview(); editCuts.redo(); }
+                    onJumpNextRequested: prismWindow.jumpNextKept()
+                    onNormalPlaybackRequested: prismWindow.toggleNormalEditPlayback()
+                    onBeginningRequested: {
+                        prismWindow.stopRangePreview();
+                        if (editCuts.keptRanges.length > 0)
+                            playerController.seek(editCuts.keptRanges[0].start);
+                    }
+                    onResetAllRequested: {
+                        prismWindow.stopRangePreview();
+                        editCuts.resetEdits();
+                        prismWindow.editStart = 0;
+                        prismWindow.editEnd = editCuts.sourceDuration;
+                    }
+                    onExampleRequested: {
+                        prismWindow.stopRangePreview();
+                        editCuts.loadExample();
+                        prismWindow.editStart = 0;
+                        prismWindow.editEnd = editCuts.sourceDuration;
+                    }
+                    onSegmentSelected: function(id) { editCuts.select(id); }
+                    onSegmentSelectedAt: function(t) {
+                        const source=editCuts.visualToSource(t);
+                        const seg=editCuts.segments.find(x=>x.start<=source && x.end>source);
+                        if(seg) editCuts.select(seg.id);
                     }
                     onPreviewRequested: prismWindow.previewEditRange()
                     onResetRequested: {
@@ -484,13 +735,27 @@ ApplicationWindow {
             EditorPanel {
                 id: editorPanel
                 Layout.fillHeight: true
-                Layout.preferredWidth: 288
-                visible: prismWindow.editMode
+                Layout.preferredWidth: 305
+                visible: prismWindow.editMode && prismWindow.sidebarOpen
                 sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
                 sourcePath: prismWindow.editSourcePath
                 startTime: prismWindow.editStart
                 endTime: prismWindow.editEnd
-                duration: videoSurface.mpv ? videoSurface.mpv.duration : 0
+                duration: editCuts.keptDuration
+                segmented: editCuts.hasCuts
+                editedDuration: editCuts.keptDuration
+                originalDuration: editCuts.sourceDuration
+                visualDuration: editCuts.visualDuration
+                previewTime: editCuts.sourceToKept(videoSurface.mpv ? videoSurface.mpv.position : 0)
+                segmentCount: editCuts.keptRanges.length
+                segmentItems: editCuts.segments
+                selectedSegmentId: editCuts.selectedId
+                onSelectSegmentRequested: function(id) { editCuts.select(id); }
+                onRestoreSegmentRequested: function(id) {
+                    prismWindow.stopRangePreview();
+                    editCuts.select(id);
+                    editCuts.restore();
+                }
                 editSpeed: prismWindow.editSpeed
                 audioVolumePercent: prismWindow.editVolumePercent
                 cropActive: prismWindow.cropGuidesVisible
@@ -503,7 +768,16 @@ ApplicationWindow {
                 onCropResetRequested: prismWindow.resetEditCrop()
                 onCropPresetRequested: function(preset) { prismWindow.setCropPreset(preset); }
                 onRotationRequested: function(turns) { prismWindow.setEditRotation(turns); }
-                onCloseRequested: prismWindow.leaveEditing()
+                onSpeedEdited: function(value) {
+                    prismWindow.editSpeed = value;
+                    playerController.setSpeed(value);
+                }
+                onAudioVolumeEdited: function(value) { prismWindow.setEditVolume(value); }
+                onCloseRequested: prismWindow.sidebarOpen = false
+                onQuickTrimRequested: {
+                    prismWindow.stopRangePreview();
+                    prismWindow.editorScreen = "quick";
+                }
                 onExportRequested: prismWindow.triggerMp4Export()
                 onExportGifRequested: prismWindow.triggerGifExport()
                 onReplaceModeRequested: replaceModeConfirmDialog.open()
@@ -549,6 +823,11 @@ ApplicationWindow {
         onMouseActivity: {
             if (prismWindow.fullscreenMode)
                 fullscreenOverlay.notifyActivity();
+        }
+        onDoubleClicked: {
+            if (prismWindow.editMode && prismWindow.editorScreen === "quick") prismWindow.toggleQuickTrimPlayback();
+            else if (prismWindow.editMode) prismWindow.toggleNormalEditPlayback();
+            else playerController.togglePause();
         }
         onSingleClicked: {
             // Single click never touches playback - only toggles the
@@ -991,6 +1270,32 @@ ApplicationWindow {
             }
         }
     }
+    // Destructive save is intentionally explicit and only applies simple source IN/OUT.
+    Dialog {
+        id: quickSaveConfirm
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(430, prismWindow.width - 36)
+        title: "Replace original MP4?"
+        standardButtons: Dialog.Yes | Dialog.Cancel
+        onAccepted: prismWindow.overwriteQuickTrim()
+        background: Rectangle {
+            radius: 10
+            color: prismWindow.tokens.panelGlassStrong || "#16272C"
+            border.color: prismWindow.tokens.panelBorder || "#23515A"
+        }
+        contentItem: Text {
+            width: 360
+            wrapMode: Text.WordWrap
+            text: "Save will overwrite the original MP4 with the selected Quick Trim range. " +
+                  "Prism first encodes a separate temporary file, and only replaces " +
+                  "the source after export succeeds. This operation cannot be undone" +
+                  (settingsStore.keepBackupOnReplace ? "; a backup is enabled." : ".")
+            color: prismWindow.tokens.textPrimary || "#FFFFFF"
+            font.pixelSize: 12
+        }
+    }
+
     FileDialog {
         id: trimSaveDialog
         title: "Export trimmed video (new MP4)"
@@ -998,12 +1303,7 @@ ApplicationWindow {
         defaultSuffix: "mp4"
         nameFilters: ["MP4 video (*.mp4)"]
         onAccepted: {
-            if (!exportQueue.queueMp4(prismWindow.editSourcePath,
-                                      prismWindow.editStart, prismWindow.editEnd,
-                                      selectedFile, prismWindow.editSpeed, prismWindow.editVolumePercent,
-                                      prismWindow.editQuarterTurns, prismWindow.editCropX,
-                                      prismWindow.editCropY, prismWindow.editCropWidth,
-                                      prismWindow.editCropHeight))
+            if (!prismWindow.queueEditSegments(false,selectedFile))
                 toast.show(exportQueue.lastError, true);
             else
                 toast.show("MP4 added to export queue.", false);
@@ -1017,12 +1317,7 @@ ApplicationWindow {
         defaultSuffix: "gif"
         nameFilters: ["Animated GIF (*.gif)"]
         onAccepted: {
-            if (!exportQueue.queueGif(prismWindow.editSourcePath,
-                                      prismWindow.editStart, prismWindow.editEnd,
-                                      selectedFile, prismWindow.editSpeed,
-                                      prismWindow.editQuarterTurns, prismWindow.editCropX,
-                                      prismWindow.editCropY, prismWindow.editCropWidth,
-                                      prismWindow.editCropHeight))
+            if (!prismWindow.queueEditSegments(true,selectedFile))
                 toast.show(exportQueue.lastError, true);
             else
                 toast.show("GIF added to export queue.", false);
@@ -1076,6 +1371,7 @@ ApplicationWindow {
     Connections {
         target: videoExportController
         function onReplacementPrepared() {
+            prismWindow.editorScreen = "quick";
             prismWindow.previewSelectionPlaying = false;
             playerController.setPaused(true);
             playerController.setSpeed(prismWindow.normalPlaybackSpeed);
@@ -1116,13 +1412,35 @@ ApplicationWindow {
         function onVolumeChanged() {
             osd.show("Volume", videoSurface.mpv.volume, 100);
         }
+        function onEofReachedChanged() {
+            if (prismWindow.editMode && videoSurface.mpv && videoSurface.mpv.eofReached &&
+                (prismWindow.normalEditPlaybackPlaying || prismWindow.previewSelectionPlaying))
+                prismWindow.stopRangePreview();
+        }
         function onPositionChanged() {
-            if (!prismWindow.editMode || !prismWindow.previewSelectionPlaying)
+            if (!prismWindow.editMode ||
+                (!prismWindow.previewSelectionPlaying && !prismWindow.normalEditPlaybackPlaying) ||
+                !videoSurface.mpv || videoSurface.mpv.paused)
                 return;
-            if (videoSurface.mpv.position >= prismWindow.editEnd - 0.05) {
-                prismWindow.previewSelectionPlaying = false;
-                playerController.setPaused(true);
-                playerController.seek(prismWindow.editEnd);
+            const at=videoSurface.mpv.position;
+            if (prismWindow.editorScreen === "quick") {
+                if (at >= prismWindow.editEnd-0.025)
+                    prismWindow.stopRangePreview();
+                return;
+            }
+            if (prismWindow.previewSelectionPlaying && at >= prismWindow.editEnd-0.025) {
+                prismWindow.stopRangePreview();
+                return;
+            }
+            const next=editCuts.nextSourceWhilePlaying(at);
+            if (next === -2) {
+                prismWindow.stopRangePreview();
+            } else if (next >= 0) {
+                if (prismWindow.previewSelectionPlaying && next >= prismWindow.editEnd-0.025) {
+                    prismWindow.stopRangePreview();
+                    return;
+                }
+                playerController.seek(next);
             }
         }
         function onMediaPathChanged() {
@@ -1130,16 +1448,73 @@ ApplicationWindow {
             if (prismWindow.editMode &&
                 videoSurface.mpv.mediaPath !== prismWindow.editSourcePath) {
                 prismWindow.previewSelectionPlaying = false;
+                prismWindow.normalEditPlaybackPlaying = false;
                 playerController.setSpeed(prismWindow.normalPlaybackSpeed);
                 prismWindow.restorePlaybackAudio();
                 prismWindow.restorePlaybackRotation();
                 prismWindow.editMode = false;
+                prismWindow.editorScreen = "quick";
                 videoThumbnailController.stop();
                 toast.show("Video changed. Edit session closed.", false);
             }
         }
     }
 
+    // Window-level shortcuts work even after a timeline button takes
+    // focus. Keep S/Delete/Ctrl+Z separate from the normal player keys.
+    Shortcut {
+        sequence: "S"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.splitEditSelection()
+    }
+    Shortcut {
+        sequence: "Delete"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.deleteEditSegment()
+    }
+    Shortcut {
+        sequence: "Ctrl+Z"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: { prismWindow.stopRangePreview(); editCuts.undo(); }
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+Z"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
+    }
+    Shortcut {
+        sequence: "Ctrl+Y"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
+    }
+
+    Shortcut {
+        sequence: "R"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.toggleEditPlayback()
+    }
+    Shortcut {
+        sequence: "J"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.jumpNextKept()
+    }
+    Shortcut {
+        sequence: "I"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.editStart = Math.max(0,Math.min(
+            videoSurface.mpv.position,prismWindow.editEnd-.12))
+    }
+    Shortcut {
+        sequence: "O"; context: Qt.WindowShortcut
+        enabled: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+        onActivated: prismWindow.editEnd = Math.min(editCuts.sourceDuration,
+            Math.max(videoSurface.mpv.position,prismWindow.editStart+.12))
+    }
     Item {
         id: globalShortcuts
         anchors.fill: parent
@@ -1150,8 +1525,10 @@ ApplicationWindow {
 
         switch (event.key) {
         case Qt.Key_Space:
-            if (prismWindow.editMode)
-                prismWindow.toggleEditPlayback();
+            if (prismWindow.editMode && prismWindow.editorScreen === "quick")
+                prismWindow.toggleQuickTrimPlayback();
+            else if (prismWindow.editMode)
+                prismWindow.toggleNormalEditPlayback();
             else
                 playerController.togglePause();
             event.accepted = true;
@@ -1177,11 +1554,11 @@ ApplicationWindow {
             event.accepted = true;
             break;
         case Qt.Key_O:
-            openFilesDialog.open();
+            if (!prismWindow.editMode) openFilesDialog.open();
             event.accepted = true;
             break;
         case Qt.Key_S:
-            playerController.takeScreenshot();
+            if (!prismWindow.editMode) playerController.takeScreenshot();
             event.accepted = true;
             break;
         case Qt.Key_B:

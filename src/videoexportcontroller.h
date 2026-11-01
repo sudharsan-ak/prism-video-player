@@ -5,6 +5,7 @@
 #include <QString>
 #include <QUrl>
 #include <QDateTime>
+#include <QVariantList>
 
 class SettingsStore;
 
@@ -49,6 +50,14 @@ public:
                              const QString &gifQuality = QString(),
                              int quarterTurns = 0, double cropX = 0, double cropY = 0,
                              double cropWidth = 1, double cropHeight = 1);
+    // Non-destructive multi-range exports. The ranges are source timestamps,
+    // captured when a queued job is submitted. Replacement is not supported.
+    Q_INVOKABLE bool startSegments(const QString &sourcePath, const QVariantList &ranges,
+                                  const QUrl &destination, bool animatedGif,
+                                  double playbackSpeed, int audioVolumePercent,
+                                  const QString &encodingPreset, const QString &gifQuality,
+                                  int quarterTurns, double cropX, double cropY,
+                                  double cropWidth, double cropHeight);
     Q_INVOKABLE void completeReplacement();
     Q_INVOKABLE void cancel();
 
@@ -67,7 +76,8 @@ private:
                    const QUrl &destination, bool replaceOriginal, double playbackSpeed,
                    int audioVolumePercent, bool animatedGif, const QString &encodingPreset,
                    const QString &gifQuality, int quarterTurns,
-                   double cropX, double cropY, double cropWidth, double cropHeight);
+                   double cropX, double cropY, double cropWidth, double cropHeight,
+                   const QVariantList &ranges = {});
     void finalizeReplacement(int attempt);
     void saveFallbackCopy(const QString &reason);
     void markCompleted(const QString &outputPath, bool replaced);

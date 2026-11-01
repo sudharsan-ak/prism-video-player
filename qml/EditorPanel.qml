@@ -17,7 +17,17 @@ Rectangle {
     }
     property string sourceTitle: ""
     property string sourcePath: ""
-    readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4")
+    readonly property bool canReplace: sourcePath.toLowerCase().endsWith(".mp4") && !segmented
+    property bool segmented: false
+    property real editedDuration: 0
+    property real originalDuration: 0
+    property real visualDuration: 0
+    property real previewTime: 0
+    readonly property real excludedDuration: Math.max(0, originalDuration-editedDuration)
+    readonly property var selectedSegment: segmentItems.find(s=>s.id===selectedSegmentId) || null
+    property int segmentCount: 1
+    property var segmentItems: []
+    property int selectedSegmentId: -1
     property real startTime: 0
     property real endTime: 0
     property real duration: 0
@@ -43,6 +53,7 @@ Rectangle {
     }
 
     signal closeRequested()
+    signal quickTrimRequested()
     signal exportRequested()
     signal exportGifRequested()
     signal replaceModeRequested()
@@ -53,8 +64,14 @@ Rectangle {
     signal cropResetRequested()
     signal cropPresetRequested(string preset)
     signal rotationRequested(int quarterTurns)
+    signal speedEdited(real speed)
+    signal audioVolumeEdited(int percent)
+    signal selectSegmentRequested(int id)
+    signal restoreSegmentRequested(int id)
 
     function mp4ModeLabel() {
+        if (segmented && settingsStore.mp4ExportMode === "replace")
+            return "Copy only (segmented edit)";
         switch (settingsStore.mp4ExportMode) {
         case "saveAs": return "Save As dialog";
         case "replace": return "Replace original";
@@ -165,6 +182,25 @@ Rectangle {
                 font.bold: true
             }
             Button {
+                id: backToTrim
+                text: "← Quick Trim"
+                font.pixelSize: 10
+                padding: 6
+                onClicked: root.quickTrimRequested()
+                background: Rectangle {
+                    radius: 6
+                    color: backToTrim.hovered ? (root.tokens.accentTint || "#124B4C")
+                                            : (root.tokens.panelGlassStrong || "#113840")
+                    border.color: root.tokens.panelBorder || "#23515A"
+                }
+                contentItem: Text {
+                    text: backToTrim.text
+                    color: root.tokens.textPrimary || "#FFFFFF"
+                    font.pixelSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            Button {
                 id: closeEditorButton
                 Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
@@ -217,6 +253,159 @@ Rectangle {
             ColumnLayout {
                 width: editScroll.availableWidth
                 spacing: 2
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "✂ Split & Remove"
+                    subtitleText: root.segmentItems.length + " pieces"
+                    expanded: true
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 10
+                        Layout.rightMargin: 10
+                        Layout.preferredHeight: 90
+                        radius: 8
+                        color: root.tokens.panelGlassStrong || "#0C3038"
+                        border.color: root.tokens.panelBorder || "#23515A"
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 9
+                            spacing: 5
+                            Text {
+                                text: "Current selection"
+                                font.bold: true; font.pixelSize: 10
+                                color: root.tokens.textPrimary || "#E6F6F6"
+                            }
+                            Text {
+                                text: root.selectedSegment
+                                    ? "Segment " + (root.segmentItems.findIndex(s=>s.id===root.selectedSegmentId)+1)
+                                    : "None"
+                                font.pixelSize: 10
+                                color: root.tokens.textSecondary || "#85AAB1"
+                            }
+                            Text {
+                                text: root.selectedSegment ? "Source " + root.timeText(root.selectedSegment.start) +
+                                      " – " + root.timeText(root.selectedSegment.end) : "Select a segment below"
+                                font.pixelSize: 10
+                                color: root.tokens.textSecondary || "#85AAB1"
+                            }
+                            Text {
+                                text: root.selectedSegment ? (root.selectedSegment.removed ? "Excluded" : "Included") : ""
+                                font.pixelSize: 10
+                                color: root.tokens.accentSolid || "#29C7AC"
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 12
+                        Layout.rightMargin: 12
+                        text: "Split uses IN and OUT on the thumbnails, not the playhead. Click a segment to Soft Delete or Restore it. Remove Gap closes the deleted space; Undo recovers it."
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 10
+                        color: root.tokens.textMuted || "#638C96"
+                    }
+                    Repeater {
+                        model: root.segmentItems
+                        RowLayout {
+                            id: segLine
+                            required property var modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
+                            spacing: 5
+                            Button {
+                                Layout.fillWidth: true
+                                text: "Segment " + (index + 1) +
+                                      (segLine.modelData.removed ? " · Removed" : " · Kept")
+                                font.pixelSize: 10
+                                onClicked: root.selectSegmentRequested(segLine.modelData.id)
+                                background: Rectangle {
+                                    radius: 5
+                                    color: root.selectedSegmentId === segLine.modelData.id
+                                        ? (root.tokens.accentTint || "#193F37")
+                                        : (root.tokens.panelGlassStrong || "#192B30")
+                                    border.color: root.selectedSegmentId === segLine.modelData.id
+                                        ? (root.tokens.accentSolid || "#28DCA7")
+                                        : (root.tokens.panelBorder || "#444")
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: root.tokens.textPrimary || "#fff"
+                                    font: parent.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Button {
+                                text: "Restore"
+                                visible: segLine.modelData.removed
+                                font.pixelSize: 10
+                                onClicked: root.restoreSegmentRequested(segLine.modelData.id)
+                            }
+                        }
+                    }
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "▤ Export Summary"
+                    subtitleText: root.timeText(
+                        root.editedDuration / Math.max(0.25, root.editSpeed))
+                    expanded: true
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                color: root.tokens.textSecondary || "#aaa"
+                font.pixelSize: 11
+                text: "Original duration: " + root.timeText(root.originalDuration) + "\n"
+                    + "Kept duration: " + root.timeText(root.editedDuration) + "\n"
+                    + "Excluded duration: " + root.timeText(root.excludedDuration) + "\n"
+                    + "Visible timeline: " + root.timeText(root.visualDuration) + "\n"
+                    + "Export duration: " + root.timeText(root.editedDuration
+                        / Math.max(0.25, root.editSpeed)) + "\n"
+                    + "Kept segments: " + root.segmentCount + "\n"
+                    + "Output: MP4 / GIF copy\n"
+                    + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
+                       root.audioVolumePercent === 100 ? "Original level" :
+                       root.audioVolumePercent + "% of original") + "\n"
+                    + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
+                    + "\nRotation: " + (root.quarterTurns * 90) + "°"
+                    + "\nCrop: " + (root.isCropped
+                        ? Math.round(root.cropWidth * 100) + "% × " +
+                          Math.round(root.cropHeight * 100) + "%"
+                        : "Full frame")
+                    + "\nSubtitles not included"
+                lineHeight: 1.45
+                wrapMode: Text.WordWrap
+            }
+
+
+                }
+
+                CollapsibleEditorSection {
+                    Layout.leftMargin: 9
+                    Layout.rightMargin: 9
+                    tokens: root.tokens
+                    titleText: "▷ Playback Preview"
+                    subtitleText: root.timeText(root.previewTime) + " / " + root.timeText(root.editedDuration)
+                    expanded: false
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 12
+                        Layout.rightMargin: 12
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                        color: root.tokens.textSecondary || "#85AAB1"
+                        text: "Normal Play uses the retained segments and automatically skips excluded sections. Play Range starts at the IN handle. The source video is never edited."
+                    }
+                }
 
                 CollapsibleEditorSection {
                     Layout.leftMargin: 9
@@ -287,43 +476,55 @@ Rectangle {
                     Layout.leftMargin: 9
                     Layout.rightMargin: 9
                     tokens: root.tokens
-                    titleText: "Export Summary"
-                    subtitleText: root.timeText(
-                        (root.endTime - root.startTime) / Math.max(0.25, root.editSpeed))
-                    expanded: false
-            Text {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                color: root.tokens.textSecondary || "#aaa"
-                font.pixelSize: 11
-                text: "Output: MP4 (H.264 + AAC)\n"
-                    + "Edited duration: " + root.timeText((root.endTime - root.startTime)
-                        / Math.max(0.25, root.editSpeed)) + "\n"
-                    + "MP4 audio: " + (root.audioVolumePercent === 0 ? "Removed" :
-                       root.audioVolumePercent === 100 ? "Original level" :
-                       root.audioVolumePercent + "% of original") + "\n"
-                    + "GIF: " + root.gifLabel(settingsStore.gifQualityPreset)
-                    + "\nRotation: " + (root.quarterTurns * 90) + "°"
-                    + "\nCrop: " + (root.isCropped
-                        ? Math.round(root.cropWidth * 100) + "% × " +
-                          Math.round(root.cropHeight * 100) + "%"
-                        : "Full frame")
-                    + "\nSubtitles not included"
-                lineHeight: 1.45
-                wrapMode: Text.WordWrap
-            }
-
-
-                }
-
-                CollapsibleEditorSection {
-                    Layout.leftMargin: 9
-                    Layout.rightMargin: 9
-                    tokens: root.tokens
                     titleText: "Export Settings"
                     subtitleText: root.presetLabel(settingsStore.encodingPreset)
                     expanded: false
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.rightMargin: 16
+                        text: "PLAYBACK / EXPORT SPEED"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: root.tokens.textMuted || "#888"
+                    }
+                    ComboBox {
+                        id: editSpeedChoice
+                        property var speeds: [0.25,0.5,0.75,1.0,1.25,1.5,2.0]
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        model: ["0.25x","0.5x","0.75x","1.0x","1.25x","1.5x","2.0x"]
+                        currentIndex: Math.max(0,speeds.indexOf(root.editSpeed))
+                        onActivated: function(index) { root.speedEdited(speeds[index]); }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        Text {
+                            text: "MP4 AUDIO LEVEL"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: root.tokens.textMuted || "#888"
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: root.audioVolumePercent + "%"
+                            font.pixelSize: 10
+                            color: root.tokens.accentSolid || "#29C7AC"
+                        }
+                    }
+                    Slider {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.rightMargin: 16
+                        from: 0; to: 100; stepSize: 5
+                        value: root.audioVolumePercent
+                        onMoved: root.audioVolumeEdited(Math.round(value))
+                    }
+
+
             Text {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
@@ -544,11 +745,13 @@ Rectangle {
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        enabled: root.endTime - root.startTime >= 0.1 &&
-                            (settingsStore.mp4ExportMode === "replace"
+                        enabled: (root.segmented ? root.editedDuration >= 0.05 :
+                                      root.endTime - root.startTime >= 0.1) &&
+                            (settingsStore.mp4ExportMode === "replace" && !root.segmented
                                 ? (root.canReplace && !exportQueue.hasOutstanding &&
                                    !videoExportController.busy) : exportQueue.canQueue)
-                        text: settingsStore.mp4ExportMode === "replace" ? "Replace MP4" : "MP4"
+                        text: root.segmented && settingsStore.mp4ExportMode === "replace"
+                            ? "MP4 copy" : settingsStore.mp4ExportMode === "replace" ? "Replace MP4" : "MP4"
                         onClicked: root.exportRequested()
                         font.bold: true
                         font.pixelSize: settingsStore.mp4ExportMode === "replace" ? 11 : 12
@@ -574,7 +777,9 @@ Rectangle {
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        enabled: exportQueue.canQueue && root.endTime - root.startTime >= 0.1
+                        enabled: exportQueue.canQueue &&
+                            (root.segmented ? root.editedDuration >= 0.05 :
+                               root.endTime - root.startTime >= 0.1)
                         text: "GIF"
                         onClicked: root.exportGifRequested()
                         font.bold: true
@@ -650,7 +855,8 @@ Rectangle {
                 Layout.rightMargin: 15
                 visible: settingsStore.mp4ExportMode === "replace"
                 text: !root.canReplace
-                    ? "Replace original is only available for MP4."
+                    ? (root.segmented ? "Segment editing always exports a new copy."
+                                      : "Replace original is only available for MP4.")
                     : exportQueue.hasOutstanding
                         ? "Replacement waits until the export queue finishes."
                         : settingsStore.keepBackupOnReplace
