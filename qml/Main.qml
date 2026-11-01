@@ -1259,33 +1259,46 @@ ApplicationWindow {
         }
     }
 
+    // Window-level shortcuts work even after a timeline button takes
+    // focus. Keep S/Delete/Ctrl+Z separate from the normal player keys.
+    Shortcut {
+        sequence: "S"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.splitEditSelection()
+    }
+    Shortcut {
+        sequence: "Delete"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: prismWindow.deleteEditSegment()
+    }
+    Shortcut {
+        sequence: "Ctrl+Z"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: { prismWindow.stopRangePreview(); editCuts.undo(); }
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+Z"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
+    }
+    Shortcut {
+        sequence: "Ctrl+Y"
+        context: Qt.WindowShortcut
+        enabled: prismWindow.editMode
+        onActivated: { prismWindow.stopRangePreview(); editCuts.redo(); }
+    }
+
     Item {
         id: globalShortcuts
         anchors.fill: parent
         focus: true
         Keys.onPressed: function(event) {
-        if (prismWindow.editMode && (event.modifiers & Qt.ControlModifier)) {
-            if (event.key === Qt.Key_Z) {
-                prismWindow.stopRangePreview();
-                if (event.modifiers & Qt.ShiftModifier) editCuts.redo();
-                else editCuts.undo();
-                event.accepted = true;
-                return;
-            }
-            if (event.key === Qt.Key_Y) {
-                prismWindow.stopRangePreview();
-                editCuts.redo();
-                event.accepted = true;
-                return;
-            }
-        }
         if (event.modifiers !== Qt.NoModifier && event.modifiers !== Qt.ShiftModifier)
             return;
-        if (prismWindow.editMode && event.key === Qt.Key_Delete) {
-            prismWindow.deleteEditSegment();
-            event.accepted = true;
-            return;
-        }
 
         switch (event.key) {
         case Qt.Key_Space:
@@ -1320,8 +1333,7 @@ ApplicationWindow {
             event.accepted = true;
             break;
         case Qt.Key_S:
-            if (prismWindow.editMode) prismWindow.splitEditSelection();
-            else playerController.takeScreenshot();
+            if (!prismWindow.editMode) playerController.takeScreenshot();
             event.accepted = true;
             break;
         case Qt.Key_B:
