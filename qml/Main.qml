@@ -75,7 +75,8 @@ ApplicationWindow {
         const mpv=videoSurface.mpv;
         if (!mpv) return;
         let current=mpv.position;
-        const playable=editCuts.keptRanges.some(r => current >= r.start && current < r.end-0.02);
+        const playable=!mpv.eofReached &&
+            editCuts.keptRanges.some(r => current >= r.start && current < r.end-0.02);
         if (!playable) {
             const next=editCuts.keptRanges.find(r => r.start > current+0.0001);
             current=next ? next.start : editCuts.keptRanges.length ? editCuts.keptRanges[0].start : 0;
@@ -494,6 +495,8 @@ ApplicationWindow {
                     segmentWarning: editCuts.warning
                     canUndo: editCuts.canUndo
                     canRedo: editCuts.canRedo
+                    hasNextKept: editCuts.nextKeptStart(
+                        videoSurface.mpv ? videoSurface.mpv.position : 0) >= 0
                     position: editCuts.sourceToVisual(videoSurface.mpv ? videoSurface.mpv.position : 0)
                     startTime: editCuts.sourceToVisual(prismWindow.editStart)
                     endTime: editCuts.sourceToVisual(prismWindow.editEnd)
@@ -1213,6 +1216,11 @@ ApplicationWindow {
         target: videoSurface.mpv
         function onVolumeChanged() {
             osd.show("Volume", videoSurface.mpv.volume, 100);
+        }
+        function onEofReachedChanged() {
+            if (prismWindow.editMode && videoSurface.mpv && videoSurface.mpv.eofReached &&
+                (prismWindow.normalEditPlaybackPlaying || prismWindow.previewSelectionPlaying))
+                prismWindow.stopRangePreview();
         }
         function onPositionChanged() {
             if (!prismWindow.editMode ||

@@ -21,6 +21,7 @@ Rectangle {
     property real keptPosition: 0
     property bool canUndo: false
     property bool canRedo: false
+    property bool hasNextKept: false
     property bool segmentEditing: false
     property string segmentWarning: ""
     property real position: 0
@@ -112,6 +113,47 @@ Rectangle {
                 text: "SELECTED  " + root.timeText(root.endTime - root.startTime)
                 color: root.tokens.textSecondary || "#aaa"
                 font.pixelSize: 11
+            }
+        }
+
+        Item {
+            id: timelineRuler
+            Layout.fillWidth: true
+            Layout.preferredHeight: 15
+            Repeater {
+                model: 13
+                Item {
+                    property real p: index/12
+                    x: p*timelineRuler.width
+                    width: 1
+                    height: timelineRuler.height
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: 1
+                        height: index % 3 === 0 ? 8 : 4
+                        color: root.tokens.textMuted || "#888"
+                        opacity: 0.65
+                    }
+                    Text {
+                        visible: index % 3 === 0
+                        x: index === 12 ? -36 : 2
+                        y: 1
+                        text: root.timeText(root.duration*p)
+                        color: root.tokens.textSecondary || "#aaa"
+                        font.pixelSize: 9
+                    }
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onDoubleClicked: function(mouse) {
+                    root.seekRequested(Math.max(0,Math.min(root.duration,
+                        mouse.x/Math.max(1,timelineRuler.width)*root.duration)));
+                }
+                ToolTip.visible: containsMouse
+                ToolTip.text: "Double-click to preview this position"
+                hoverEnabled: true
             }
         }
 
@@ -618,6 +660,7 @@ Rectangle {
             }
             TrimButton {
                 text: "Jump next"
+                enabled: root.hasNextKept
                 onClicked: root.jumpNextRequested()
                 ToolTip.text: "Seek to the next retained segment"
                 ToolTip.visible: hovered
