@@ -396,16 +396,17 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
             : QStringLiteral("dither=bayer:bayer_scale=%1:diff_mode=rectangle")
                   .arg(compact ? 4 : 3);
         const QString gifFilter = QStringLiteral(
-            "%6fps=%2,"
+            "[0:v]%1,fps=%2,"
             "scale='min(%3,iw)':-1:flags=lanczos,split[frames][colors];"
             "[colors]trim=duration=2,setpts=PTS-STARTPTS,"
             "palettegen=%4[palette];"
             "[frames][palette]paletteuse=%5[gifout]")
-                .arg(videoFilter).arg(fps).arg(width).arg(paletteOptions).arg(useOptions)
-                .arg(slices.isEmpty() ? QStringLiteral("[0:v]%1,").arg(videoFilter) :
-                                     QStringLiteral("[vout]"));
-        args << QStringLiteral("-filter_complex") <<
-            (slices.isEmpty() ? gifFilter : multiGraph + QStringLiteral(";") + gifFilter)
+                .arg(videoFilter).arg(fps).arg(width).arg(paletteOptions).arg(useOptions);
+        const QString graph = slices.isEmpty() ? gifFilter :
+            multiGraph + QStringLiteral(";") +
+            QString(gifFilter).replace(QStringLiteral("[0:v]%1,").arg(videoFilter),
+                                       QStringLiteral("[vout]"));
+        args << QStringLiteral("-filter_complex") << graph
              << QStringLiteral("-map") << QStringLiteral("[gifout]")
              << QStringLiteral("-an")
              << QStringLiteral("-loop") << QStringLiteral("0")
@@ -426,12 +427,11 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
                  << QStringLiteral("-c:a") << QStringLiteral("aac")
                  << QStringLiteral("-b:a") << QStringLiteral("192k");
         }
+        if (slices.isEmpty()) args << QStringLiteral("-vf") << videoFilter;
         args << QStringLiteral("-c:v") << QStringLiteral("libx264")
              << QStringLiteral("-preset")
              << m_encodingPresetForJob
              << QStringLiteral("-crf") << QStringLiteral("18")
-             << (slices.isEmpty() ? QStringLiteral("-vf") : QStringLiteral("-threads"))
-             << (slices.isEmpty() ? videoFilter : QStringLiteral("0"))
              << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
              << QStringLiteral("-movflags") << QStringLiteral("+faststart")
              << QStringLiteral("-f") << QStringLiteral("mp4");
