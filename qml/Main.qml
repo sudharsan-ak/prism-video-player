@@ -39,6 +39,9 @@ ApplicationWindow {
     property bool editMode: false
     // Edit always opens in the simple trim screen. Advanced cuts are session state.
     property string editorScreen: "quick"
+    // Independent of editorScreen so the same side panel is reachable from
+    // Quick Trim and Advanced Editor without forcing a screen switch.
+    property bool sidebarOpen: false
     property string editSourcePath: ""
     property real editStart: 0
     property real editEnd: 0
@@ -480,9 +483,11 @@ ApplicationWindow {
             libraryOpen: prismWindow.libraryOpen
             adjustmentsOpen: prismWindow.adjustmentsOpen
             editorActive: prismWindow.editMode
+            sidebarOpen: prismWindow.sidebarOpen
             outstandingExports: exportQueue.waitingCount + (exportQueue.hasOutstanding && videoExportController.busy ? 1 : 0)
             onQueueRequested: exportQueuePopup.open()
             onEditRequested: prismWindow.editMode ? prismWindow.leaveEditing() : prismWindow.beginEditing()
+            onSidebarToggleRequested: prismWindow.sidebarOpen = !prismWindow.sidebarOpen
             onLibraryToggled: prismWindow.libraryOpen = !prismWindow.libraryOpen
             onAdjustmentsToggled: prismWindow.adjustmentsOpen = !prismWindow.adjustmentsOpen
             onOpenFilesRequested: openFilesDialog.open()
@@ -598,7 +603,7 @@ ApplicationWindow {
                 EditorTimeline {
                     id: editorTimeline
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 335
+                    Layout.preferredHeight: 250
                     visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
                     onQuickTrimRequested: {
                         prismWindow.stopRangePreview();
@@ -729,7 +734,7 @@ ApplicationWindow {
                 id: editorPanel
                 Layout.fillHeight: true
                 Layout.preferredWidth: 305
-                visible: prismWindow.editMode && prismWindow.editorScreen === "advanced"
+                visible: prismWindow.editMode && prismWindow.sidebarOpen
                 sourceTitle: prismWindow.editSourcePath.split(/[\\\\\\/]/).pop()
                 sourcePath: prismWindow.editSourcePath
                 startTime: prismWindow.editStart
@@ -766,7 +771,7 @@ ApplicationWindow {
                     playerController.setSpeed(value);
                 }
                 onAudioVolumeEdited: function(value) { prismWindow.setEditVolume(value); }
-                onCloseRequested: prismWindow.leaveEditing()
+                onCloseRequested: prismWindow.sidebarOpen = false
                 onQuickTrimRequested: {
                     prismWindow.stopRangePreview();
                     prismWindow.editorScreen = "quick";
