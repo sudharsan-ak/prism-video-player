@@ -94,6 +94,7 @@ Rectangle {
                 height: parent.height
                 mediaPosition: mpv ? mpv.position : 0
                 mediaDuration: mpv ? mpv.duration : 0
+                endOfFileReached: mpv ? mpv.eofReached : false
                 onSeekRequested: function(seconds) { playerController.seek(seconds); }
             }
 

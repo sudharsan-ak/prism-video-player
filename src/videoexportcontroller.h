@@ -36,13 +36,19 @@ public:
     Q_INVOKABLE bool startTrim(const QString &sourcePath, double startSeconds,
                               double endSeconds, const QUrl &destination,
                               double playbackSpeed = 1.0, int audioVolumePercent = 100,
-                              const QString &encodingPreset = QString());
+                              const QString &encodingPreset = QString(),
+                              int quarterTurns = 0, double cropX = 0, double cropY = 0,
+                              double cropWidth = 1, double cropHeight = 1);
     Q_INVOKABLE bool startReplaceTrim(const QString &sourcePath, double startSeconds, double endSeconds,
-                                       double playbackSpeed = 1.0, int audioVolumePercent = 100);
+                                       double playbackSpeed = 1.0, int audioVolumePercent = 100,
+                                       int quarterTurns = 0, double cropX = 0, double cropY = 0,
+                                       double cropWidth = 1, double cropHeight = 1);
     Q_INVOKABLE bool startGif(const QString &sourcePath, double startSeconds,
                              double endSeconds, const QUrl &destination,
                              double playbackSpeed = 1.0,
-                             const QString &gifQuality = QString());
+                             const QString &gifQuality = QString(),
+                             int quarterTurns = 0, double cropX = 0, double cropY = 0,
+                             double cropWidth = 1, double cropHeight = 1);
     Q_INVOKABLE void completeReplacement();
     Q_INVOKABLE void cancel();
 
@@ -60,7 +66,8 @@ private:
     bool beginTrim(const QString &sourcePath, double startSeconds, double endSeconds,
                    const QUrl &destination, bool replaceOriginal, double playbackSpeed,
                    int audioVolumePercent, bool animatedGif, const QString &encodingPreset,
-                   const QString &gifQuality);
+                   const QString &gifQuality, int quarterTurns,
+                   double cropX, double cropY, double cropWidth, double cropHeight);
     void finalizeReplacement(int attempt);
     void saveFallbackCopy(const QString &reason);
     void markCompleted(const QString &outputPath, bool replaced);

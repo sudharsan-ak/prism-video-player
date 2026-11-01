@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // Trim selection is independent of the playback seek bar: only the
-// range handles change the exported IN/OUT values. The red playhead
-// shows current mpv position; export cuts at the exact chosen times.
+// range handles change the exported IN/OUT values. The draggable playhead
+// scrubs mpv position; export cuts at the exact chosen times.
 Rectangle {
     id: root
     height: 175
@@ -39,6 +39,13 @@ Rectangle {
     signal audioVolumeEdited(int percent)
     signal resetRequested()
     signal exportRequested()
+
+    function seekTimeAtPixel(pixelX) {
+        if (root.duration <= 0 || frameTrack.width <= 0)
+            return 0;
+        return Math.max(0, Math.min(root.duration,
+            pixelX * root.duration / frameTrack.width));
+    }
 
     function timeText(seconds) {
         let whole = Math.max(0, Math.floor(seconds || 0));
@@ -157,14 +164,6 @@ Rectangle {
                     border.color: root.tokens.accentSolid || "#A89BFF"
                     border.width: 2
                 }
-                Rectangle {
-                    x: Math.max(0, Math.min(parent.width - 2,
-                        parent.width * root.position / Math.max(root.duration, 1)))
-                    height: parent.height
-                    width: 2
-                    color: "#F06B6B"
-                    z: 3
-                }
             }
 
             RangeSlider {
@@ -227,6 +226,8 @@ Rectangle {
                 property real pressX: 0
                 property real originalStart: 0
                 property real originalEnd: 0
+                property bool dragActivated: false
+                property real clickThreshold: 5
                 x: frameTrack.x + trimRange.first.visualPosition * frameTrack.width + 14
                 y: frameTrack.y
                 width: Math.max(0, (trimRange.second.visualPosition -
@@ -242,20 +243,113 @@ Rectangle {
                     pressX = moveSelectionArea.mapToItem(frameTrack, mouse.x, mouse.y).x;
                     originalStart = root.startTime;
                     originalEnd = root.endTime;
-                    root.rangeMoveStarted();
+                    dragActivated = false;
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed || root.duration <= 0 || frameTrack.width <= 0)
                         return;
                     const pointerX = moveSelectionArea.mapToItem(
                         frameTrack, mouse.x, mouse.y).x;
-                    const delta = (pointerX - pressX) * root.duration / frameTrack.width;
+                    const pixelDelta = pointerX - pressX;
+                    // A click moves only the playhead. A deliberate drag
+                    // moves the entire IN/OUT selection together.
+                    if (!dragActivated) {
+                        if (Math.abs(pixelDelta) < clickThreshold)
+                            return;
+                        dragActivated = true;
+                        root.rangeMoveStarted();
+                    }
+                    const delta = pixelDelta * root.duration / frameTrack.width;
                     const span = originalEnd - originalStart;
                     const start = Math.max(0, Math.min(root.duration - span,
                                                      originalStart + delta));
                     root.rangeMoved(start, start + span);
                 }
-                onReleased: root.rangeMoveFinished(root.startTime)
+                onReleased: function(mouse) {
+                    if (dragActivated) {
+                        root.rangeMoveFinished(root.startTime);
+                    } else {
+                        const pointerX = moveSelectionArea.mapToItem(
+                            frameTrack, mouse.x, mouse.y).x;
+                        // The click was inside the selected region, so do
+                        // not change either trim boundary.
+                        root.seekRequested(Math.max(root.startTime, Math.min(root.endTime,
+                                                root.seekTimeAtPixel(pointerX))));
+                    }
+                    dragActivated = false;
+                }
+                onCanceled: dragActivated = false
+            }
+
+            // Clipchamp-style playhead: a wide grab target and a narrow
+            // theme-aware needle. It floats above the thumbnail strip,
+            // without making the marker itself visually bulky.
+            Item {
+                id: playheadMarker
+                property real displayTime: playheadGrab.pressed
+                    ? playheadGrab.scrubSeconds : root.position
+                width: 22
+                height: frameTrack.height + 15
+                x: frameTrack.x +
+                    Math.max(0, Math.min(1, displayTime / Math.max(root.duration, 0.001)))
+                    * frameTrack.width - width / 2
+                y: frameTrack.y - 15
+                z: 7
+                visible: root.duration > 0
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: 12
+                    width: 4
+                    height: parent.height - 12
+                    color: root.tokens.textPrimary || "#FFFFFF"
+                    border.width: 1
+                    border.color: root.tokens.videoCardBackground || "#101010"
+                }
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: 0
+                    width: 20
+                    height: 16
+                    radius: 5
+                    color: root.tokens.textPrimary || "#FFFFFF"
+                    border.color: root.tokens.videoCardBackground || "#101010"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "▼"
+                        font.pixelSize: 9
+                        color: root.tokens.videoCardBackground || "#101010"
+                    }
+                }
+                MouseArea {
+                    id: playheadGrab
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.SizeHorCursor
+                    ToolTip.visible: containsMouse && !pressed
+                    ToolTip.text: "Drag playhead to scrub the video"
+                    ToolTip.delay: 600
+                    property real scrubSeconds: 0
+                    property real gripOffset: 0
+                    onPressed: function(mouse) {
+                        scrubSeconds = root.position;
+                        // Preserve where inside the 22px handle the user
+                        // grabbed it so the needle doesn't jump on drag.
+                        gripOffset = mouse.x - width / 2;
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed)
+                            return;
+                        const trackX = playheadGrab.mapToItem(
+                            frameTrack, mouse.x, mouse.y).x - gripOffset;
+                        scrubSeconds = root.seekTimeAtPixel(trackX);
+                        root.seekRequested(scrubSeconds);
+                    }
+                    onReleased: root.seekRequested(scrubSeconds)
+                }
             }
         }
 

@@ -257,8 +257,20 @@ void PlayerController::persistResumePosition()
 
 void PlayerController::togglePause()
 {
-    if (m_mpv)
-        m_mpv->setProperty(QStringLiteral("pause"), !m_mpv->paused());
+    if (!m_mpv)
+        return;
+
+    // With mpv keep-open=yes, EOF leaves the final frame displayed
+    // and the player paused. Simply unpausing does not restart the file.
+    // The Play button, Space, double-click, and fullscreen controls all
+    // use this method, so they should consistently replay from the start.
+    if (m_mpv->eofReached() && !m_mpv->mediaPath().isEmpty()) {
+        m_mpv->setProperty(QStringLiteral("time-pos"), 0.0);
+        m_mpv->setProperty(QStringLiteral("pause"), false);
+        return;
+    }
+
+    m_mpv->setProperty(QStringLiteral("pause"), !m_mpv->paused());
 }
 
 void PlayerController::setPaused(bool paused)

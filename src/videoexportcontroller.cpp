@@ -98,27 +98,34 @@ QUrl VideoExportController::suggestedGifOutputUrl(const QString &sourcePath) con
 bool VideoExportController::startTrim(const QString &sourcePath, double startSeconds,
                                       double endSeconds, const QUrl &destination,
                                       double playbackSpeed, int audioVolumePercent,
-                                      const QString &encodingPreset)
+                                      const QString &encodingPreset, int quarterTurns,
+                                      double cropX, double cropY, double cropWidth, double cropHeight)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, audioVolumePercent, false, encodingPreset, QString());
+                     false, playbackSpeed, audioVolumePercent, false, encodingPreset, QString(),
+                     quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
 bool VideoExportController::startReplaceTrim(const QString &sourcePath,
                                             double startSeconds, double endSeconds,
-                                            double playbackSpeed, int audioVolumePercent)
+                                            double playbackSpeed, int audioVolumePercent,
+                                            int quarterTurns, double cropX, double cropY,
+                                            double cropWidth, double cropHeight)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds,
                      QUrl::fromLocalFile(sourcePath), true, playbackSpeed, audioVolumePercent,
-                     false, QString(), QString());
+                     false, QString(), QString(), quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
 bool VideoExportController::startGif(const QString &sourcePath, double startSeconds,
                                      double endSeconds, const QUrl &destination,
-                                     double playbackSpeed, const QString &gifQuality)
+                                     double playbackSpeed, const QString &gifQuality,
+                                     int quarterTurns, double cropX, double cropY,
+                                     double cropWidth, double cropHeight)
 {
     return beginTrim(sourcePath, startSeconds, endSeconds, destination,
-                     false, playbackSpeed, 0, true, QString(), gifQuality);
+                     false, playbackSpeed, 0, true, QString(), gifQuality,
+                     quarterTurns, cropX, cropY, cropWidth, cropHeight);
 }
 
 bool VideoExportController::beginTrim(const QString &sourcePath, double startSeconds,
@@ -126,12 +133,25 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
                                       bool replaceOriginal, double playbackSpeed,
                                       int audioVolumePercent, bool animatedGif,
                                       const QString &encodingPreset,
-                                      const QString &gifQuality)
+                                      const QString &gifQuality, int quarterTurns,
+                                      double cropX, double cropY,
+                                      double cropWidth, double cropHeight)
 {
     if (m_busy)
         return false;
     if (audioVolumePercent < 0 || audioVolumePercent > 100) {
         fail(QStringLiteral("Audio volume must be between 0% and 100%."));
+        return false;
+    }
+    // Crop coordinates are normalized to the ROTATED image so that the
+    // on-screen crop rectangle maps to the same pixels in MP4 and GIF.
+    constexpr double epsilon = 0.000001;
+    if (quarterTurns < 0 || quarterTurns > 3 ||
+        !std::isfinite(cropX) || !std::isfinite(cropY) ||
+        !std::isfinite(cropWidth) || !std::isfinite(cropHeight) ||
+        cropX < 0 || cropY < 0 || cropWidth < 0.05 || cropHeight < 0.05 ||
+        cropX + cropWidth > 1.0 + epsilon || cropY + cropHeight > 1.0 + epsilon) {
+        fail(QStringLiteral("Invalid crop or rotation settings."));
         return false;
     }
 
@@ -234,7 +254,31 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
     // Apply the source trim before transforming timestamps; output time
     // is sourceDuration / playbackSpeed. Pass argv directly, no shell.
     const QString speed = QString::number(playbackSpeed, 'f', 3);
-    const QString videoFilter = QStringLiteral("setpts=(PTS-STARTPTS)/") + speed;
+    QStringList editFilters { QStringLiteral("setpts=(PTS-STARTPTS)/") + speed };
+    // Use the same filter order for MP4 and GIF: rotate first, crop
+    // the rotated canvas second, then (for GIF only) scale/fps/palette.
+    switch (quarterTurns) {
+    case 1: editFilters << QStringLiteral("transpose=clock"); break;
+    case 2: editFilters << QStringLiteral("hflip") << QStringLiteral("vflip"); break;
+    case 3: editFilters << QStringLiteral("transpose=cclock"); break;
+    default: break;
+    }
+    const bool fullFrame = std::abs(cropX) < epsilon && std::abs(cropY) < epsilon &&
+                           std::abs(cropWidth - 1.0) < epsilon &&
+                           std::abs(cropHeight - 1.0) < epsilon;
+    if (!fullFrame) {
+        // H.264 yuv420p and GIF size conversion behave best on even pixel
+        // boundaries. At least two pixels remain in each direction.
+        const QString crop = QStringLiteral(
+            "crop=trunc(iw*%1/2)*2:trunc(ih*%2/2)*2:"
+            "trunc(iw*%3/2)*2:trunc(ih*%4/2)*2")
+            .arg(cropWidth, 0, 'f', 7)
+            .arg(cropHeight, 0, 'f', 7)
+            .arg(cropX, 0, 'f', 7)
+            .arg(cropY, 0, 'f', 7);
+        editFilters << crop;
+    }
+    const QString videoFilter = editFilters.join(QStringLiteral(","));
     const QString tempoFilter = playbackSpeed < 0.5
         ? QStringLiteral("atempo=0.5,atempo=") + QString::number(playbackSpeed / 0.5, 'f', 3)
         : QStringLiteral("atempo=") + speed;
@@ -267,12 +311,12 @@ bool VideoExportController::beginTrim(const QString &sourcePath, double startSec
             : QStringLiteral("dither=bayer:bayer_scale=%1:diff_mode=rectangle")
                   .arg(compact ? 4 : 3);
         const QString gifFilter = QStringLiteral(
-            "[0:v]setpts=(PTS-STARTPTS)/%1,fps=%2,"
+            "[0:v]%1,fps=%2,"
             "scale='min(%3,iw)':-1:flags=lanczos,split[frames][colors];"
             "[colors]trim=duration=2,setpts=PTS-STARTPTS,"
             "palettegen=%4[palette];"
             "[frames][palette]paletteuse=%5[gifout]")
-                .arg(speed).arg(fps).arg(width).arg(paletteOptions).arg(useOptions);
+                .arg(videoFilter).arg(fps).arg(width).arg(paletteOptions).arg(useOptions);
         args << QStringLiteral("-filter_complex") << gifFilter
              << QStringLiteral("-map") << QStringLiteral("[gifout]")
              << QStringLiteral("-an")
