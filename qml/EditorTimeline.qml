@@ -247,7 +247,7 @@ Rectangle {
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 anchors.fill: parent
                 from: 0
-                to: Math.max(root.duration, 1)
+                to: Math.max(root.duration, 0.001)
                 first.value: root.startTime
                 second.value: root.endTime
                 focusPolicy: Qt.NoFocus
